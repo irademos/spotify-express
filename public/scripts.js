@@ -155,16 +155,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     function displayPlaylists(playlists, category) {
         if (!playlists || playlists.length === 0) return;
-    
-        // const categoryHeader = document.createElement('h3');
-        // categoryHeader.textContent = category;
-        // searchResultsList.appendChild(categoryHeader);
 
-        // Display new search results
-        // const playlists = data.playlists.items;
-
-        // if (playlists.length > 8) return;
-    
         playlists.forEach(playlist => {
             if (playlist) {
                 // Check if the playlist already exists in the search results
@@ -203,11 +194,11 @@ document.addEventListener('DOMContentLoaded', function() {
     // Function to update the selected playlists UI
     function updateSelectedPlaylists() {
         selectedPlaylistsList.innerHTML = ''; // Clear the list
-
+    
         selectedPlaylists.forEach(playlist => {
-        const listItem = document.createElement('li');
-        listItem.textContent = playlist.name;
-        selectedPlaylistsList.appendChild(listItem);
+            const listItem = document.createElement('li');
+            listItem.textContent = `${playlist.name} (${playlist.owner.display_name})`;
+            selectedPlaylistsList.appendChild(listItem);
         });
     }
 

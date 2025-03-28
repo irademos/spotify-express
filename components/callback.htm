@@ -4,29 +4,71 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Spotify Login Callback</title>
+  <style>
+    body {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+      font-family: Arial, sans-serif;
+      text-align: center;
+    }
+
+    .spinner {
+      border: 4px solid rgba(0, 0, 0, 0.1);
+      border-top: 4px solid #1DB954;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      animation: spin 1s linear infinite;
+      margin-top: 10px;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
 </head>
 <body>
   <h1>Spotify Callback</h1>
-  <p>Extracting access token...</p>
+  <p>Logging in...</p>
+  <div class="spinner"></div>
+  
 
   <script>
-    // Extract the access token from the URL fragment
-    const hash = window.location.hash.substr(1); // Get the part after '#'
+    const hash = window.location.hash.substr(1); 
     const params = new URLSearchParams(hash);
     const accessToken = params.get('access_token');
   
     if (accessToken) {
       console.log('Spotify access token:', accessToken);
   
-      // Set the access token as a cookie (client-side only)
+      // Set token in cookies (client-side only)
       document.cookie = `spotifyAccessToken=${accessToken}; path=/; max-age=3600`;
   
-      // Optionally, you can redirect the user after storing the token
-      window.location.href = '/dashboard';
+      // Send token to backend to save user details
+      fetch('/auth/spotify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accessToken })
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          window.location.href = '/dashboard'; // Redirect user after saving info
+        } else {
+          console.error('Failed to save user data:', data.error);
+        }
+      })
+      .catch(error => console.error('Error:', error));
     } else {
       console.error('Access token not found in the URL fragment!');
     }
   </script>
+  
   
 </body>
 </html>

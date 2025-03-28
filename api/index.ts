@@ -6,8 +6,12 @@ const { sql } = require('@vercel/postgres');
 const bodyParser = require('body-parser');
 const path = require('path');
 const cookieParser = require('cookie-parser');
+// const fetch = require('node-fetch');
+const mongoose = require('mongoose');
+const User = require('./models/User'); // Import your User schema
 
 app.use(cookieParser());
+app.use(express.json());
 
 // Create application/x-www-form-urlencoded parser
 const urlencodedParser = bodyParser.urlencoded({ extended: false });
@@ -89,9 +93,49 @@ app.get('/dashboard', function (req, res) {
     } else {
       res.send('You are not logged in.');
     }
-  });
+});
   
-  
+app.post('/auth/spotify', async (req, res) => {
+    const { accessToken } = req.body;
+
+    // Fetch user info from Spotify
+    const userResponse = await fetch('https://api.spotify.com/v1/me', {
+        headers: { 'Authorization': `Bearer ${accessToken}` }
+    });
+
+    const userData = await userResponse.json();
+
+    if (!userData.id) {
+        return res.status(400).json({ success: false, error: 'Failed to fetch user info' });
+    }
+
+    // Store user in database
+    const user = await User.findOneAndUpdate(
+        { spotifyId: userData.id },
+        { spotifyId: userData.id, accessToken },
+        { upsert: true, new: true }
+    );
+
+    res.json({ success: true, user });
+});
+
+app.post('/save-settings', async (req, res) => {
+  const { spotifyId, selectedPlaylists, newPlaylistName, frequency } = req.body;
+
+  const cronSchedules = {
+      daily: '0 0 * * *',  // Midnight every day
+      weekly: '0 0 * * 0'   // Midnight every Sunday
+  };
+
+  await User.findOneAndUpdate(
+      { spotifyId },
+      { selectedPlaylists, newPlaylistName, frequency, cronSchedule: cronSchedules[frequency] },
+      { new: true }
+  );
+
+  res.json({ success: true });
+});
+
   
 
 // app.listen(3001, () => console.log('Server ready on port 3001.'));
