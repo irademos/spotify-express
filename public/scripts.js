@@ -17,6 +17,7 @@ document.addEventListener('DOMContentLoaded', function() {
     let selectedPlaylists = [];
     let selectedDevice = [];
     let or_key = '';
+    let player = null;
 
     fetch('/api/config')
     .then(response => response.json())
@@ -41,7 +42,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     window.onSpotifyWebPlaybackSDKReady = () => {
         const token = document.cookie.match(/spotifyAccessToken=([^;]+)/)?.[1];
-        const player = new Spotify.Player({
+        player = new Spotify.Player({
             name: 'Web Playback SDK Player',
             getOAuthToken: cb => { cb(token); },
             volume: 0.5
@@ -54,34 +55,6 @@ document.addEventListener('DOMContentLoaded', function() {
     
         player.connect();
     };
-
-    async function playTrack(trackUri) {
-        const authToken = document.cookie.match(/spotifyAccessToken=([^;]+)/)?.[1];
-        // if (!window.spotifyDeviceId) {
-        //     console.error('Missing device');
-        //     return;
-        // }
-        if (!authToken) {
-            console.error('Missing token');
-            return;
-        }
-    
-        await fetch('https://api.spotify.com/v1/me/player/play', {
-            method: 'PUT',
-            headers: {
-                'Authorization': `Bearer ${authToken}`,
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                device_id: selectedDevice,
-                uris: [trackUri],
-                position_ms: 0
-            })
-        })
-        .then(response => console.log('Playback started', response))
-        .then(data => console.log('Playback started', data))
-        .catch(error => console.error('Error starting playback', error));
-    }
     
     function searchPublicPlaylists(query) {
         const accessToken = document.cookie.match(/spotifyAccessToken=([^;]+)/)?.[1];
@@ -325,37 +298,70 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // async function aiTalk() {
-    //     console.log('or_key',or_key)
-    //     await fetch("https://openrouter.ai/api/v1/chat/completions", {
-    //         method: "POST",
-    //         headers: {
-    //           "Authorization": `Bearer ${or_key}`, // Replace with your key
-    //           "Content-Type": "application/json"
-    //         },
-    //         body: JSON.stringify({
-    //         //   model: "deepseek-chat",
-    //             // model: 'openrouter/auto', // required even for auto routing
-    //             messages: [{ role: "user", content: "List 5 local bands in Atlanta Georgia. Only list the band name and description. Don't respond with anything else." }],
-    //             stream: false,
-    //         })
-    //         })
-    //         .then(response => response.json()) // <-- this line gets the actual data
-    //         .then(data => {
-    //             console.log(data)
-    //             const reply = data.choices?.[0]?.message?.content;
-    //             if (reply) {
-    //                 console.log('AI:', reply);
-    //                 const utterance = new SpeechSynthesisUtterance(reply);
-    //                 speechSynthesis.speak(utterance);
-    //             } else {
-    //                 console.error('No valid AI response:', data);
-    //             }
-    //         })
-    //         .catch(error => console.error('Fetch error:', error));
-          
-    // }
+    async function playTrack(trackUri) {
+        const authToken = document.cookie.match(/spotifyAccessToken=([^;]+)/)?.[1];
+        if (!authToken) {
+            console.error('Missing token');
+            return;
+        }
+    
+        await fetch('https://api.spotify.com/v1/me/player/play', {
+            method: 'PUT',
+            headers: {
+                'Authorization': `Bearer ${authToken}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                device_id: selectedDevice,
+                uris: [trackUri],
+                position_ms: 0
+            })
+        })
+        .then(response => console.log('Playback started', response))
+        .then(data => console.log('Playback started', data))
+        .catch(error => console.error('Error starting playback', error));
+    }
 
+    // Function to wait for the track to finish
+    function waitForTrackToFinish() {
+        return new Promise((resolve) => {
+            const listener = (state) => {
+                if (state.paused && state.position === 0) {  // Track has ended
+                    player.removeListener('player_state_changed', listener);
+                    resolve();
+                }
+            };
+
+            player.addListener('player_state_changed', listener);
+        });
+    }
+
+    // Main function to play songs from bands sequentially
+    async function playBandSongsSequentially(bands) {
+        for (const band of bands) {
+            const bandName = band.name;
+            const bandDescription = band.description;
+            console.log(`Playing song from ${bandName}: ${bandDescription}`);
+
+            const songUri = await getSongUriForBand(bandName); // Placeholder function to get song URI
+            if (!songUri) continue; // Skip if no song found
+
+            // Read the band description
+            const bandUtterance = new SpeechSynthesisUtterance(bandDescription);
+            speechSynthesis.speak(bandUtterance);
+
+            // Wait for the speech to finish before starting the song
+            await new Promise(resolve => {
+                bandUtterance.onend = resolve;
+            });
+
+            // Play the track
+            await playTrack(songUri); // Start the track
+
+            // Wait until the track finishes before playing the next one
+            await waitForTrackToFinish();
+        }
+    }
 
     async function aiTalk() {
         console.log('or_key', or_key);
@@ -381,7 +387,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     body: JSON.stringify({
                         messages: [{ 
                             role: "user", 
-                            content: `List 5 local bands in ${nearestCity.city}, ${nearestCity.state_name}. Respond in this format exactly: BandName: Description. One per line. No extra text or explanation.`
+                            content: `List 20 well known local bands in ${nearestCity.city}, ${nearestCity.state_name} or a nearby big city. Respond in this format exactly: BandName: Description. One per line. No numbers, no asterisks, no bullet points, no extra text or explanation.`
                         }],
                         stream: false,
                     })
@@ -392,26 +398,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 if (bandsReply) {
                     console.log('AI:', bandsReply);
-                    const utterance = new SpeechSynthesisUtterance(bandsReply);
-                    speechSynthesis.speak(utterance);
-                    
-                    // Step 4: For each band, play a song and describe the band
+                    // play a song and describe the band
                     const bands = parseBands(bandsReply); // Parse the band list from the AI response
-                    for (const band of bands) {
-                        const bandName = band.name;
-                        const bandDescription = band.description;
-                        console.log(`Playing song from ${bandName}: ${bandDescription}`);
-                        
-                        const songUri = await getSongUriForBand(bandName); // Placeholder to get song URI
-                        playTrack(songUri);
-                        
-                        // Read the band description
-                        const bandUtterance = new SpeechSynthesisUtterance(bandDescription);
-                        speechSynthesis.speak(bandUtterance);
-                        
-                        // Wait for the song to finish before playing the next
-                        await new Promise(resolve => setTimeout(resolve, 3000)); // Wait for 3 seconds (adjust timing as needed)
-                    }
+                    playBandSongsSequentially(bands);
                 } else {
                     console.error('No valid AI response:', bandsData);
                 }
@@ -484,10 +473,17 @@ document.addEventListener('DOMContentLoaded', function() {
         });
 
         const searchData = await searchResponse.json();
+        console.log(searchData);
         const track = searchData.tracks.items[0];
 
         if (track) {
-            return track.uri; // Return the URI of the first song found
+            const artistName = track.artists[0].name;
+            if (artistName.toLowerCase().includes(bandName.toLowerCase())) {
+                return track.uri; // Return the URI if the artist matches
+            } else {
+                console.log(`Artist '${artistName}' does not match band '${bandName}'`);
+                return null; // No match found
+            }
         } else {
             throw new Error("No song found for this band");
         }

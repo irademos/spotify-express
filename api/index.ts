@@ -82,7 +82,7 @@ app.get('/dashboard', function (req, res) {
                       <input type="file" id="uploadFileInput" /><br>
                       <button id="setDevice">Set Device</button>
                       <ul id="devicesList"></ul><br>
-                      <button id="playButton">Play AI Beta</button><br>
+                      <button id="playButton">AI DJ Beta</button><br>
                       <script src="https://sdk.scdn.co/spotify-player.js"></script>
                   </div>
 
