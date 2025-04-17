@@ -19,7 +19,8 @@ app.get('/api/config', (req, res) => {
     res.json({
         client_id: process.env.SPOTIFY_CLIENT_ID,
         redirect_uri: process.env.SPOTIFY_REDIRECT_URI,
-        or_key: process.env.OPENROUTER_KEY
+        or_key: process.env.OPENROUTER_KEY,
+        groq_key: process.env.GROQ_KEY
     });
 });
 

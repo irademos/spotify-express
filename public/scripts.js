@@ -18,11 +18,13 @@ document.addEventListener('DOMContentLoaded', function() {
     let selectedDevice = [];
     let or_key = '';
     let player = null;
+    let groq_key = '';
 
     fetch('/api/config')
     .then(response => response.json())
     .then(config => {
         or_key = config.or_key;
+        groq_key = config.groq_key;
         const loginButton = document.getElementById('loginButton');
         if (loginButton) {
             loginButton.addEventListener('click', () => {
@@ -340,7 +342,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (item && progress !== null) {
                     const timeLeft = item.duration_ms - progress;
                     const currentTrackId = state?.item?.id;
-                    if (timeLeft <= 5000 && currentTrackId === lastTrackId && !alreadyTriggered) {
+                    if (timeLeft <= 1000 && currentTrackId === lastTrackId && !alreadyTriggered) {
                         alreadyTriggered = true;
                         console.log('Track is within 5 seconds of ending');
                         clearInterval(checkInterval);
@@ -392,6 +394,40 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    async function getGroqResponse(prompt) {
+        const url = 'https://api.groq.com/openai/v1/chat/completions';
+        const authToken = groq_key; // Replace with your actual token
+      
+        const data = {
+          model: "gemma2-9b-it",
+          messages: [{
+            role: "user",
+            content: prompt
+          }]
+        };
+      
+        try {
+          const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${authToken}`,
+            },
+            body: JSON.stringify(data)
+          });
+      
+          const responseData = await response.json();
+          console.log('Response:', responseData);
+          return responseData
+        } catch (error) {
+          console.error('Error:', error);
+          return error;
+        }
+    }
+      
+      
+      
+
     async function aiTalk() {
         await loadCities();
         
@@ -404,9 +440,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 // Step 2: Determine nearest big city (you can improve this step with a more sophisticated method)
                 const nearestCity = await getNearestCity(latitude, longitude); // Placeholder for city retrieval
+                const prompt = `List 20 well known local bands in ${nearestCity.city}, ${nearestCity.state_name} or a nearby big city. Respond in this format exactly: BandName: Description. One per line. No numbers, no asterisks, no bullet points, no extra text or explanation.`
                 
-                // Step 3: Use AI to get local bands in the nearest city
-                const bandsResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+                // ai prompt
+                let bandsResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
                     method: "POST",
                     headers: {
                         "Authorization": `Bearer ${or_key}`,
@@ -415,22 +452,26 @@ document.addEventListener('DOMContentLoaded', function() {
                     body: JSON.stringify({
                         messages: [{ 
                             role: "user", 
-                            content: `List 20 well known local bands in ${nearestCity.city}, ${nearestCity.state_name} or a nearby big city. Respond in this format exactly: BandName: Description. One per line. No numbers, no asterisks, no bullet points, no extra text or explanation.`
+                            content: prompt
                         }],
                         stream: false,
                     })
                 });
                 
-                const bandsData = await bandsResponse.json();
-                const bandsReply = bandsData.choices?.[0]?.message?.content;
+                let bandsData = await bandsResponse.json();
+                let bandsReply = bandsData.choices?.[0]?.message?.content;
                 
+                let bands = null;
                 if (bandsReply) {
                     console.log('AI:', bandsReply);
-                    // play a song and describe the band
-                    const bands = parseBands(bandsReply); // Parse the band list from the AI response
+                    bands = parseBands(bandsReply); // Parse the band list from the AI response
                     playBandSongsSequentially(bands);
                 } else {
-                    console.error('No valid AI response:', bandsData);
+                    bandsResponse = await getGroqResponse(prompt);
+                    bandsReply = bandsResponse.choices?.[0]?.message?.content;
+                    console.log(bandsReply)
+                    bands = parseBands(bandsReply); // Parse the band list from the AI response
+                    playBandSongsSequentially(bands);
                 }
             }, (error) => {
                 console.error('Geolocation error:', error);
