@@ -51,20 +51,35 @@ document.addEventListener('DOMContentLoaded', function() {
         player.addListener('ready', ({ device_id }) => {
             console.log('Player is ready with device ID:', device_id);
             window.spotifyDeviceId = device_id; // Store for later use
+            transferPlaybackHere(device_id);
         });
     
         player.connect();
     };
+
+    async function transferPlaybackHere(deviceId) {
+        await fetchWithSpotifyAuth('https://api.spotify.com/v1/me/player', {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                device_ids: [deviceId],
+                play: true
+            })
+        })
+        .then(config => {
+            console.log(config)
+        })
+        .catch(error => console.error('Error fetching config:', error));
+    }
     
     function searchPublicPlaylists(query) {
-        const accessToken = document.cookie.match(/spotifyAccessToken=([^;]+)/)?.[1];
-        if (!accessToken || !query) return;
+        if (!query) return;
     
-        fetch(`https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=playlist&limit=10`, {
+        fetchWithSpotifyAuth(`https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=playlist&limit=10`, {
             method: 'GET',
-            headers: {
-                'Authorization': `Bearer ${accessToken}`
-            }
+            headers: {}
         })
         .then(response => response.json())
         .then(data => {
@@ -121,8 +136,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    
-
     // Function to remove a playlist from selected playlists
     function removeFromSelectedPlaylists(playlist) {
         selectedPlaylists = selectedPlaylists.filter(p => p.id !== playlist.id);
@@ -165,13 +178,7 @@ document.addEventListener('DOMContentLoaded', function() {
         reader.readAsText(file);
     }
 
-    async function createPlaylist() {
-        const accessToken = document.cookie.match(/spotifyAccessToken=([^;]+)/)?.[1];
-        if (!accessToken) {
-            console.error('No access token found.');
-            return;
-        }
-    
+    async function createPlaylist() {   
         const frequency = document.querySelector('input[name="frequency"]:checked')?.value;
         const newPlaylistName = document.getElementById('newPlaylistNameInput').value.trim();
         if (!newPlaylistName) {
@@ -195,8 +202,8 @@ document.addEventListener('DOMContentLoaded', function() {
     
         try {
             // Get user's Spotify ID
-            const userResponse = await fetch('https://api.spotify.com/v1/me', {
-                headers: { 'Authorization': `Bearer ${accessToken}` }
+            const userResponse = await fetchWithSpotifyAuth('https://api.spotify.com/v1/me', {
+                headers: {}
             });
             const userData = await userResponse.json();
             const userId = userData.id;
@@ -207,10 +214,9 @@ document.addEventListener('DOMContentLoaded', function() {
             }
     
             // Create a new empty playlist
-            const playlistResponse = await fetch(`https://api.spotify.com/v1/users/${userId}/playlists`, {
+            const playlistResponse = await fetchWithSpotifyAuth(`https://api.spotify.com/v1/users/${userId}/playlists`, {
                 method: 'POST',
                 headers: {
-                    'Authorization': `Bearer ${accessToken}`,
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
@@ -230,8 +236,8 @@ document.addEventListener('DOMContentLoaded', function() {
     
             // Loop through selected playlists and filter tracks
             for (const playlist of selectedPlaylists) {
-                const playlistTracksResponse = await fetch(`https://api.spotify.com/v1/playlists/${playlist.id}/tracks`, {
-                    headers: { 'Authorization': `Bearer ${accessToken}` }
+                const playlistTracksResponse = await fetchWithSpotifyAuth(`https://api.spotify.com/v1/playlists/${playlist.id}/tracks`, {
+                    headers: {}
                 });
                 const playlistTracksData = await playlistTracksResponse.json();
     
@@ -245,10 +251,9 @@ document.addEventListener('DOMContentLoaded', function() {
     
             // Add filtered tracks to the new playlist in batches (max 100 per request)
             for (let i = 0; i < trackUris.length; i += 100) {
-                await fetch(`https://api.spotify.com/v1/playlists/${newPlaylistId}/tracks`, {
+                await fetchWithSpotifyAuth(`https://api.spotify.com/v1/playlists/${newPlaylistId}/tracks`, {
                     method: 'POST',
                     headers: {
-                        'Authorization': `Bearer ${accessToken}`,
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({ uris: trackUris.slice(i, i + 100) })
@@ -286,11 +291,9 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     async function setDevice() {
-        await fetch('https://api.spotify.com/v1/me/player/devices', {
+        await fetchWithSpotifyAuth('https://api.spotify.com/v1/me/player/devices', {
             method: 'GET',
-            headers: {
-                'Authorization': `Bearer ${document.cookie.match(/spotifyAccessToken=([^;]+)/)?.[1]}`,
-            }
+            headers: {}
         })
         .then(response => response.json())
         .then(data => {
@@ -300,44 +303,63 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    async function playTrack(trackUri) {
-        const authToken = document.cookie.match(/spotifyAccessToken=([^;]+)/)?.[1];
-        if (!authToken) {
-            console.error('Missing token');
-            return;
-        }
-    
-        await fetch('https://api.spotify.com/v1/me/player/play', {
+    async function playTrack(trackUri) {    
+        await fetchWithSpotifyAuth('https://api.spotify.com/v1/me/player/play', {
             method: 'PUT',
             headers: {
-                'Authorization': `Bearer ${authToken}`,
-                'Content-Type': 'application/json',
+                'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                device_id: selectedDevice,
+                device_id: window.spotifyDeviceId,
                 uris: [trackUri],
                 position_ms: 0
             })
         })
         .then(response => console.log('Playback started', response))
-        .then(data => console.log('Playback started', data))
         .catch(error => console.error('Error starting playback', error));
     }
 
     // Function to wait for the track to finish
+    let alreadyTriggered = false;
+    let lastTrackId = null;
     function waitForTrackToFinish() {
         return new Promise((resolve) => {
-            const listener = (state) => {
-                if (!state || state.paused) return;
-    
-                const remaining = state.duration - state.position;
-                if (remaining <= 5000) {
-                    player.removeListener('player_state_changed', listener);
-                    resolve();
+            const checkInterval = setInterval(async () => {
+                const res = await fetchWithSpotifyAuth('https://api.spotify.com/v1/me/player');
+                
+                if (!res.ok) {
+                    console.error('Failed to fetch player state');
+                    return;
                 }
-            };
+            
+                const state = await res.json();
+                console.log(state)
+                const item = state.item;
+                const progress = state.progress_ms;
+            
+                if (item && progress !== null) {
+                    const timeLeft = item.duration_ms - progress;
+                    const currentTrackId = state?.item?.id;
+                    if (timeLeft <= 5000 && currentTrackId === lastTrackId && !alreadyTriggered) {
+                        alreadyTriggered = true;
+                        console.log('Track is within 5 seconds of ending');
+                        clearInterval(checkInterval);
+                        resolve();
+                        
+                    }
     
-            player.addListener('player_state_changed', listener);
+                    if (currentTrackId && currentTrackId !== lastTrackId && !alreadyTriggered) {
+                        if (lastTrackId !== null) {
+                            alreadyTriggered = true;
+                            console.log('User skipped to next track or track changed');
+                            clearInterval(checkInterval);
+                            resolve();
+                        }
+                        lastTrackId = currentTrackId;
+                    }
+                }
+                
+            }, 1000); // check every second
         });
     }
 
@@ -365,12 +387,12 @@ document.addEventListener('DOMContentLoaded', function() {
             await playTrack(songUri); // Start the track
 
             // Wait until the track finishes before playing the next one
+            alreadyTriggered = false;
             await waitForTrackToFinish();
         }
     }
 
     async function aiTalk() {
-        console.log('or_key', or_key);
         await loadCities();
         
         // Step 1: Get user location using the Geolocation API
@@ -467,17 +489,60 @@ document.addEventListener('DOMContentLoaded', function() {
         });
         return bands;
     }
+
+    async function refreshAccessToken(refreshToken) {
+        const response = await fetch('/api/refresh-token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ refresh_token: refreshToken })
+        });
+    
+        const data = await response.json();
+        if (data.access_token) {
+            // Save to cookie or memory
+            document.cookie = `spotifyAccessToken=${data.access_token}; path=/`;
+        }
+    }
+
+    async function fetchWithSpotifyAuth(url, options = {}, retry = true) {
+        let accessToken = document.cookie.match(/spotifyAccessToken=([^;]+)/)?.[1];
+    
+        const res = await fetch(url, {
+            ...options,
+            headers: {
+                ...(options.headers || {}),
+                Authorization: `Bearer ${accessToken}`
+            }
+        });
+    
+        // Token expired — refresh and retry once
+        if (res.status === 401 && retry) {
+            const refreshToken = document.cookie.match(/spotifyRefreshToken=([^;]+)/)?.[1];
+            const refreshRes = await fetch('/api/refresh-token', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ refresh_token: refreshToken })
+            });
+    
+            const refreshData = await refreshRes.json();
+            if (refreshData.access_token) {
+                document.cookie = `spotifyAccessToken=${refreshData.access_token}; path=/`;
+    
+                // Retry original request with new token
+                return fetchWithSpotifyAuth(url, options, false);
+            } else {
+                throw new Error('Token refresh failed');
+            }
+        }
+    
+        return res;
+    }
+    
     
     async function getSongUriForBand(bandName) {
         // search
         const searchUrl = `https://api.spotify.com/v1/search?q=${encodeURIComponent(bandName)}&type=track&limit=1`;
-        const searchResponse = await fetch(searchUrl, {
-            method: 'GET',
-            headers: {
-                'Authorization': `Bearer ${document.cookie.match(/spotifyAccessToken=([^;]+)/)?.[1]}`
-            }
-        });
-
+        const searchResponse = await fetchWithSpotifyAuth(searchUrl);
         const searchData = await searchResponse.json();
         console.log(searchData);
         const track = searchData.tracks.items[0];

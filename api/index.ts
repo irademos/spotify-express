@@ -6,8 +6,11 @@ const { sql } = require('@vercel/postgres');
 const bodyParser = require('body-parser');
 const path = require('path');
 const cookieParser = require('cookie-parser');
+const refreshRoute = require('./refresh');
 
 app.use(cookieParser());
+app.use(bodyParser.json());
+app.use('/api', refreshRoute);
 
 // Create application/x-www-form-urlencoded parser
 const urlencodedParser = bodyParser.urlencoded({ extended: false });
