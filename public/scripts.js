@@ -131,6 +131,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Event listener for the search input
     searchInput.addEventListener('input', function (e) {
+        if (!e) return;
+        
         const query = e.target.value;
         searchAllPlaylists(query); // Perform search as user types
     });
@@ -326,12 +328,15 @@ document.addEventListener('DOMContentLoaded', function() {
     function waitForTrackToFinish() {
         return new Promise((resolve) => {
             const listener = (state) => {
-                if (state.paused && state.position === 0) {  // Track has ended
+                if (!state || state.paused) return;
+    
+                const remaining = state.duration - state.position;
+                if (remaining <= 5000) {
                     player.removeListener('player_state_changed', listener);
                     resolve();
                 }
             };
-
+    
             player.addListener('player_state_changed', listener);
         });
     }
@@ -341,13 +346,14 @@ document.addEventListener('DOMContentLoaded', function() {
         for (const band of bands) {
             const bandName = band.name;
             const bandDescription = band.description;
-            console.log(`Playing song from ${bandName}: ${bandDescription}`);
+            speech_text = `Playing song from ${bandName}: ${bandDescription}`
+            console.log(speech_text);
 
             const songUri = await getSongUriForBand(bandName); // Placeholder function to get song URI
             if (!songUri) continue; // Skip if no song found
 
             // Read the band description
-            const bandUtterance = new SpeechSynthesisUtterance(bandDescription);
+            const bandUtterance = new SpeechSynthesisUtterance(speech_text);
             speechSynthesis.speak(bandUtterance);
 
             // Wait for the speech to finish before starting the song
