@@ -15,7 +15,8 @@ const urlencodedParser = bodyParser.urlencoded({ extended: false });
 app.get('/api/config', (req, res) => {
     res.json({
         client_id: process.env.SPOTIFY_CLIENT_ID,
-        redirect_uri: process.env.SPOTIFY_REDIRECT_URI
+        redirect_uri: process.env.SPOTIFY_REDIRECT_URI,
+        or_key: process.env.OPENROUTER_KEY
     });
 });
 
@@ -77,8 +78,12 @@ app.get('/dashboard', function (req, res) {
 
                       <!-- Upload and Download Buttons -->
                       <h3>Manage Playlist Settings:</h3>
-                      <button id="downloadFileButton">Download Settings</button>
-                      <input type="file" id="uploadFileInput" />
+                      <button id="downloadFileButton" style="margin-right: 60px;">Save Settings</button>
+                      <input type="file" id="uploadFileInput" /><br>
+                      <button id="setDevice">Set Device</button>
+                      <ul id="devicesList"></ul><br>
+                      <button id="playButton">Play AI Beta</button><br>
+                      <script src="https://sdk.scdn.co/spotify-player.js"></script>
                   </div>
 
                   <script src="/scripts.js"></script>
