@@ -317,7 +317,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 position_ms: 0
             })
         })
-        .then(response => console.log('Playback started', response))
+        .then(response => {
+            console.log('Playback started', response);
+            alreadyTriggered = false;
+        }
+        )
         .catch(error => console.error('Error starting playback', error));
     }
 
@@ -335,29 +339,25 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             
                 const state = await res.json();
-                console.log(state)
                 const item = state.item;
+                console.log("state", state.is_playing, state.progress_ms);
                 const progress = state.progress_ms;
             
                 if (item && progress !== null) {
                     const timeLeft = item.duration_ms - progress;
                     const currentTrackId = state?.item?.id;
-                    if (timeLeft <= 1000 && currentTrackId === lastTrackId && !alreadyTriggered) {
-                        alreadyTriggered = true;
+                    if (timeLeft <= 5000) {
                         console.log('Track is within 5 seconds of ending');
                         clearInterval(checkInterval);
                         resolve();
-                        
+                        return;
                     }
     
-                    if (currentTrackId && currentTrackId !== lastTrackId && !alreadyTriggered) {
-                        if (lastTrackId !== null) {
-                            alreadyTriggered = true;
-                            console.log('User skipped to next track or track changed');
-                            clearInterval(checkInterval);
-                            resolve();
-                        }
-                        lastTrackId = currentTrackId;
+                    if (progress == 0 && state.is_playing == false) {
+                        console.log('User skipped to next track');
+                        clearInterval(checkInterval);
+                        resolve();
+                        return;
                     }
                 }
                 
@@ -389,7 +389,7 @@ document.addEventListener('DOMContentLoaded', function() {
             await playTrack(songUri); // Start the track
 
             // Wait until the track finishes before playing the next one
-            alreadyTriggered = false;
+            
             await waitForTrackToFinish();
         }
     }
@@ -424,9 +424,6 @@ document.addEventListener('DOMContentLoaded', function() {
           return error;
         }
     }
-      
-      
-      
 
     async function aiTalk() {
         await loadCities();
@@ -457,10 +454,9 @@ document.addEventListener('DOMContentLoaded', function() {
                         stream: false,
                     })
                 });
-                
+
                 let bandsData = await bandsResponse.json();
                 let bandsReply = bandsData.choices?.[0]?.message?.content;
-                
                 let bands = null;
                 if (bandsReply) {
                     console.log('AI:', bandsReply);

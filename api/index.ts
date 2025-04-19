@@ -37,6 +37,8 @@ app.get('/callback', function (req, res) {
 
 app.get('/dashboard', function (req, res) {
     const accessToken = req.cookies.spotifyAccessToken;
+    // const token = document.cookie.match(/spotifyAccessToken=([^;]+)/)?.[1];
+    console.log(accessToken);
     
     if (accessToken) {
       fetch('https://api.spotify.com/v1/me', {
@@ -45,7 +47,16 @@ app.get('/dashboard', function (req, res) {
           'Authorization': `Bearer ${accessToken}`
         }
       })
-      .then(response => response.json())
+      .then(async res => {
+        console.log("Status:", res.status);
+        if (!res.ok) {
+          const text = await res.text(); // In case it's not JSON
+          console.error("Spotify API error:", text);
+          return;
+        }
+        const data = await res.json();
+        console.log("User Data:", data);
+      })
       .then(data => {
         // Send the data to the client-side JavaScript
         res.send(`
@@ -60,7 +71,7 @@ app.get('/dashboard', function (req, res) {
           <body>
               <div>
                   <h1>Spotify Playlist Creator</h1>
-                  <p>Welcome, <span id="userDisplayName">${data.display_name}</span></p>
+                  <p>Welcome, <span id="userDisplayName"> Andy </span></p>
 
                   <!-- Playlist search and selection -->
                   <div id="content"></div>
