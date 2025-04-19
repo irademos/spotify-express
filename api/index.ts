@@ -47,18 +47,15 @@ app.get('/dashboard', function (req, res) {
           'Authorization': `Bearer ${accessToken}`
         }
       })
-      .then(async res => {
-        console.log("Status:", res.status);
-        if (!res.ok) {
-          const text = await res.text(); // In case it's not JSON
+      .then(async response => {
+        console.log("Status:", response.status);
+        if (!response.ok) {
+          const text = await response.text(); // In case it's not JSON
           console.error("Spotify API error:", text);
           return;
         }
-        const data = await res.json();
+        const data = await response.json();
         console.log("User Data:", data);
-      })
-      .then(data => {
-        // Send the data to the client-side JavaScript
         res.send(`
           <!DOCTYPE html>
           <html lang="en">
@@ -71,7 +68,7 @@ app.get('/dashboard', function (req, res) {
           <body>
               <div>
                   <h1>Spotify Playlist Creator</h1>
-                  <p>Welcome, <span id="userDisplayName"> Andy </span></p>
+                  <p>Welcome, <span id="userDisplayName">${data.display_name}</span></p>
 
                   <!-- Playlist search and selection -->
                   <div id="content"></div>
