@@ -9,12 +9,10 @@ const bodyParser = require('body-parser');
 const path = require('path');
 const cookieParser = require('cookie-parser');
 const refreshRoute = require('./refresh');
-const scrapeRoute = require('./scrapePlaylist');
 
 app.use(cookieParser());
 app.use(bodyParser.json());
 
-app.use('/api/scrapePlaylist', scrapeRoute);  // Scrape playlist route
 app.use('/api/refresh', refreshRoute);        // Refresh route
 
 // Create application/x-www-form-urlencoded parser

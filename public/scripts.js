@@ -599,7 +599,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     async function refreshAccessToken(refreshToken) {
-        const response = await fetch('/api/refresh-token', {
+        const response = await fetch('/api/refresh', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ refresh_token: refreshToken })
@@ -626,7 +626,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // Token expired — refresh and retry once
         if (res.status === 401 && retry) {
             const refreshToken = document.cookie.match(/spotifyRefreshToken=([^;]+)/)?.[1];
-            const refreshRes = await fetch('/api/refresh-token', {
+            const refreshRes = await fetch('/api/refresh', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ refresh_token: refreshToken })
