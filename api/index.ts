@@ -1,16 +1,21 @@
 require('dotenv').config();
 
 const express = require('express');
+const axios = require('axios');
+const cheerio = require('cheerio');
 const app = express();
 const { sql } = require('@vercel/postgres');
 const bodyParser = require('body-parser');
 const path = require('path');
 const cookieParser = require('cookie-parser');
 const refreshRoute = require('./refresh');
+const scrapeRoute = require('./scrapePlaylist');
 
 app.use(cookieParser());
 app.use(bodyParser.json());
-app.use('/api', refreshRoute);
+
+app.use('/api/scrapePlaylist', scrapeRoute);  // Scrape playlist route
+app.use('/api/refresh', refreshRoute);        // Refresh route
 
 // Create application/x-www-form-urlencoded parser
 const urlencodedParser = bodyParser.urlencoded({ extended: false });
@@ -35,10 +40,48 @@ app.get('/callback', function (req, res) {
     res.sendFile(path.join(__dirname, '..', 'components', 'callback.htm'));
 });
 
+interface Track {
+  track: string;
+  artist: string;
+}
+
+app.get('/scrape', function (req, res) {
+  const url = req.query.url;
+  if (!url) {
+      return res.status(400).send('URL parameter is missing');
+  }
+
+  console.log("Here");
+
+  axios.get(url).then(async response => {
+      
+      const $ = cheerio.load(response.data);
+      const tracks: Track[] = [];
+      $('div.Box__BoxComponent-sc-y4nds-0').each((_, el) => {
+          const trackName = $(el).find('span.ListRowTitle__LineClamp-sc-1xe2if1-0').text().trim();
+          const artistName = $(el).find('p.ListRowDetails__ListRowDetailText-sc-sozu4l-0').text().trim();
+          
+          if (trackName && artistName) {
+              tracks.push({ track: trackName, artist: artistName });
+          }
+      });
+
+      if (tracks.length === 0) {
+          return res.status(404).send('No tracks found in the playlist');
+      }
+
+      res.status(200).json(tracks);  // Respond with the tracks in JSON format
+  })
+  .catch(error => {
+      console.log(error);
+  });
+  
+});
+
 app.get('/dashboard', function (req, res) {
     const accessToken = req.cookies.spotifyAccessToken;
     // const token = document.cookie.match(/spotifyAccessToken=([^;]+)/)?.[1];
-    console.log(accessToken);
+    // console.log(accessToken);
     
     if (accessToken) {
       fetch('https://api.spotify.com/v1/me', {
@@ -74,6 +117,10 @@ app.get('/dashboard', function (req, res) {
                   <div id="content"></div>
 
                   <div id="mainContentTemplate">
+                      <div>
+                        <input type="text" id="urlInput" placeholder="URLs for Spotify Made Playlists" />
+                        <button id="addButton">Add</button>
+                      </div>
                       <input type="text" id="playlistSearchInput" placeholder="Search Playlists" />
                       <ul id="searchResultsList"></ul>
 
@@ -87,6 +134,7 @@ app.get('/dashboard', function (req, res) {
 
                       <input type="text" id="newPlaylistNameInput" placeholder="New Playlist Name">
                       <button id="createPlaylistButton">Create Playlist</button>
+                      <button id="testDiscover">Test Discover</button>
 
                       <!-- Upload and Download Buttons -->
                       <h3>Manage Playlist Settings:</h3>

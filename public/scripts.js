@@ -15,6 +15,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const selectedPlaylistsList = document.getElementById('selectedPlaylistsList');
     const devicesList = document.getElementById('devicesList');
     let selectedPlaylists = [];
+    let selectedURLs = [];
     let selectedDevice = [];
     let or_key = '';
     let player = null;
@@ -31,8 +32,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 const CLIENT_ID = config.client_id;
                 const REDIRECT_URI = config.redirect_uri;
                 const SCOPES = 'user-library-read user-read-private playlist-read-private playlist-modify-private playlist-modify-public user-read-playback-state user-modify-playback-state';
-                
-
                 const authUrl = `https://accounts.spotify.com/authorize?client_id=${CLIENT_ID}&response_type=token&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${encodeURIComponent(SCOPES)}`;
                 window.location.href = authUrl;
             });
@@ -180,6 +179,40 @@ document.addEventListener('DOMContentLoaded', function() {
         reader.readAsText(file);
     }
 
+    // Discover: "https://open.spotify.com/playlist/37i9dQZEVXcMyZVrUpCKOR"
+    async function scrapePlaylist(url) {
+        try {
+            const res = await fetch(`/scrape?url=${encodeURIComponent(url)}`);
+            if (!res.ok) {
+                throw new Error('Failed to fetch data');
+            }
+            const data = await res.json();  // Parse the response body as JSON
+            console.log(data);  // Logs the scraped tracks (name, artist)
+            return data;
+        } catch (error) {
+            console.error('Error during scrape:', error);
+            return "";
+        }
+    }
+
+    function addURL() {
+        const url = document.getElementById('urlInput').value.trim();
+        
+        // Validate URL before adding
+        if (url && isValidURL(url)) {
+            selectedURLs.push(url);
+            document.getElementById('urlInput').value = "";
+        } else {
+            alert("Please enter a valid URL");
+        }
+    }
+    
+    function isValidURL(url) {
+        // Basic URL validation (you can improve it)
+        const regex = /^(https?|ftp):\/\/[^\s/$.?#].[^\s]*$/i;
+        return regex.test(url);
+    }
+
     async function createPlaylist() {   
         const frequency = document.querySelector('input[name="frequency"]:checked')?.value;
         const newPlaylistName = document.getElementById('newPlaylistNameInput').value.trim();
@@ -188,8 +221,8 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
     
-        if (!selectedPlaylists.length) {
-            alert('Please select at least one playlist.');
+        if (!selectedPlaylists.length && selectedURLs.length === 0) {
+            alert('Please select at least one playlist or provide a URL.');
             return;
         }
     
@@ -251,6 +284,23 @@ document.addEventListener('DOMContentLoaded', function() {
                 trackUris = trackUris.concat(filteredTracks);
             }
     
+            // Loop through selected URLs and scrape tracks
+            for (const url of selectedURLs) {
+                try {
+                    const response = await scrapePlaylist(url);
+                    for (const scraped of response) {
+                        const uri = await getUriForTrack(scraped);
+                        if (uri) {
+                            trackUris.push(uri);
+                        } else {
+                            console.warn(`Track not found: ${query}`);
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error scraping playlist from URL:', url, error);
+                }
+            }
+    
             // Add filtered tracks to the new playlist in batches (max 100 per request)
             for (let i = 0; i < trackUris.length; i += 100) {
                 await fetchWithSpotifyAuth(`https://api.spotify.com/v1/playlists/${newPlaylistId}/tracks`, {
@@ -267,6 +317,27 @@ document.addEventListener('DOMContentLoaded', function() {
             console.error('Error creating playlist:', error);
         }
     }
+
+    async function getUriForTrack(scraped) {
+        const query = `${scraped.track} ${scraped.artist}`;
+        const searchParams = new URLSearchParams({ q: query, type: 'track', limit: 1 });
+
+        try {
+            const searchResponse = await fetchWithSpotifyAuth(`https://api.spotify.com/v1/search?${searchParams}`, {
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+            const searchData = await searchResponse.json();
+
+            const uri = searchData.tracks?.items?.[0]?.uri;
+            return uri;
+        } catch (searchError) {
+            console.error(`Error searching track: ${query}`, searchError);
+            return null;
+        }
+    }
+    
 
     function updateDevices(data) {
         
@@ -610,6 +681,8 @@ document.addEventListener('DOMContentLoaded', function() {
         aiTalk();
     });
     document.getElementById("setDevice").addEventListener("click", setDevice);
+    document.getElementById("testDiscover").addEventListener("click", testDiscover);
+    document.getElementById("addButton").addEventListener("click", addURL);
 
 });
 
