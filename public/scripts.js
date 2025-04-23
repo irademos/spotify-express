@@ -135,12 +135,25 @@ document.addEventListener('DOMContentLoaded', function() {
             
             selectedPlaylistsList.appendChild(listItem);
         });
+
+        selectedURLs.forEach(url => {
+            const listItem = document.createElement('li');
+            listItem.textContent = `${url}`;
+
+            listItem.onclick = () => removeFromURLs(url);
+            selectedPlaylistsList.appendChild(listItem);
+        })
     }
 
     // Function to remove a playlist from selected playlists
     function removeFromSelectedPlaylists(playlist) {
         selectedPlaylists = selectedPlaylists.filter(p => p.id !== playlist.id);
         updateSelectedPlaylists(); // Update UI after removal
+    }
+
+    function removeFromURLs(url) {
+        selectedURLs = selectedURLs.filter(p => p !== url);
+        updateSelectedPlaylists();
     }
 
     // Event listener for the search input
@@ -151,33 +164,41 @@ document.addEventListener('DOMContentLoaded', function() {
         searchAllPlaylists(query); // Perform search as user types
     });
 
-    // Function to download selected playlists as a JSON file
     function downloadSelectedPlaylists() {
-        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(selectedPlaylists, null, 2));
+        const data = {
+            selectedPlaylists: selectedPlaylists,
+            selectedURLs: selectedURLs
+        };
+    
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(data, null, 2));
         const downloadAnchor = document.createElement('a');
         downloadAnchor.setAttribute("href", dataStr);
-        downloadAnchor.setAttribute("download", "selected_playlists.json");
+        downloadAnchor.setAttribute("download", "playlist_data.json");
         document.body.appendChild(downloadAnchor);
         downloadAnchor.click();
         document.body.removeChild(downloadAnchor);
     }
+    
 
-    // Function to handle file upload
-    function uploadSelectedPlaylists(event) {
-        const file = event.target.files[0];
+
+    function uploadPlaylistData(event) {
+        const file = event.target.files?.[0];
         if (!file) return;
-
+    
         const reader = new FileReader();
         reader.onload = function (e) {
             try {
-                selectedPlaylists = JSON.parse(e.target.result) || [];
+                const data = JSON.parse(e.target.result);
+                selectedPlaylists = data.selectedPlaylists || [];
+                selectedURLs = data.selectedURLs || [];
                 updateSelectedPlaylists();
-            } catch (error) {
-                console.error("Error parsing uploaded file:", error);
+            } catch (err) {
+                alert("Invalid file format.");
             }
         };
         reader.readAsText(file);
     }
+    
 
     // Discover: "https://open.spotify.com/playlist/37i9dQZEVXcMyZVrUpCKOR"
     async function scrapePlaylist(url) {
@@ -202,6 +223,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (url && isValidURL(url)) {
             selectedURLs.push(url);
             document.getElementById('urlInput').value = "";
+            updateSelectedPlaylists();
         } else {
             alert("Please enter a valid URL");
         }
@@ -671,7 +693,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Attach to button
     // Event listeners for buttons
     document.getElementById("downloadFileButton").addEventListener("click", downloadSelectedPlaylists);
-    document.getElementById("uploadFileInput").addEventListener("change", uploadSelectedPlaylists);
+    document.getElementById("uploadFileInput").addEventListener("change", uploadPlaylistData);
     document.getElementById("createPlaylistButton").addEventListener("click", createPlaylist);
     // document.getElementById("playButton").addEventListener("click", playButton);
     const testTrackUri = 'spotify:track:2bgFEoaY6r4CqDPjllvKsl'; // example track
