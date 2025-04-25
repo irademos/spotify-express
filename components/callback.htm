@@ -21,7 +21,7 @@
       // Set the access token as a cookie (client-side only)
       document.cookie = `spotifyAccessToken=${accessToken}; path=/; max-age=3600`;
   
-      // Optionally, you can redirect the user after storing the token
+      // redirect the user after storing the token
       window.location.href = '/dashboard';
     } else {
       console.error('Access token not found in the URL fragment!');

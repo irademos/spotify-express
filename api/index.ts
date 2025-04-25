@@ -43,6 +43,14 @@ interface Track {
   artist: string;
 }
 
+app.get('/auto-playlist', function (req, res) {
+  res.sendFile(path.join(__dirname, '..', 'components', 'autoPlaylist.htm'));
+});
+
+app.get('/ai-dj', function (req, res) {
+  res.sendFile(path.join(__dirname, '..', 'components', 'aiDj.htm'));
+});
+
 app.get('/scrape', function (req, res) {
   const url = req.query.url;
   if (!url) {
@@ -76,6 +84,20 @@ app.get('/scrape', function (req, res) {
   
 });
 
+app.get('/api/me', (req, res) => {
+  const accessToken = req.cookies.spotifyAccessToken;
+  if (!accessToken) return res.status(401).send('Unauthorized');
+  fetch('https://api.spotify.com/v1/me', {
+    headers: { 'Authorization': `Bearer ${accessToken}` }
+  })
+  .then(response => response.json())
+  .then(data => res.json(data))
+  .catch(err => {
+    console.error(err);
+    res.status(500).send('Error fetching user data');
+  });
+});
+
 app.get('/dashboard', function (req, res) {
     const accessToken = req.cookies.spotifyAccessToken;
     // const token = document.cookie.match(/spotifyAccessToken=([^;]+)/)?.[1];
@@ -97,59 +119,9 @@ app.get('/dashboard', function (req, res) {
         }
         const data = await response.json();
         console.log("User Data:", data);
-        res.send(`
-          <!DOCTYPE html>
-          <html lang="en">
-          <head>
-              <meta charset="UTF-8">
-              <meta name="viewport" content="width=device-width, initial-scale=1.0">
-              <title>Spotify Playlist Creator</title>
-              <link rel="stylesheet" href="/styles.css">
-          </head>
-          <body>
-              <div>
-                  <h1>Spotify Playlist Creator</h1>
-                  <p>Welcome, <span id="userDisplayName">${data.display_name}</span></p>
-
-                  <!-- Playlist search and selection -->
-                  <div id="content"></div>
-
-                  <div id="mainContentTemplate">
-                      <div>
-                        <input type="text" id="urlInput" placeholder="URLs for Spotify Made Playlists" />
-                        <button id="addButton">Add</button>
-                      </div>
-                      <input type="text" id="playlistSearchInput" placeholder="Search Playlists" />
-                      <ul id="searchResultsList"></ul>
-
-                      <h3>Selected Playlists:</h3>
-                      <ul id="selectedPlaylistsList"></ul>
-
-                      <h3>Frequency:</h3>
-                      <label><input type="radio" name="frequency" value="daily" /> Daily</label>
-                      <label><input type="radio" name="frequency" value="weekly" /> Weekly</label>
-                      <label><input type="radio" name="frequency" value="monthly" /> Monthly</label>
-
-                      <input type="text" id="newPlaylistNameInput" placeholder="New Playlist Name">
-                      <button id="createPlaylistButton">Create Playlist</button>
-                      <button id="testDiscover">Test Discover</button>
-
-                      <!-- Upload and Download Buttons -->
-                      <h3>Manage Playlist Settings:</h3>
-                      <button id="downloadFileButton" style="margin-right: 60px;">Save Settings</button>
-                      <input type="file" id="uploadFileInput" /><br>
-                      <button id="setDevice">Set Device</button>
-                      <ul id="devicesList"></ul><br>
-                      <button id="playButton">AI DJ Beta</button><br>
-                      <script src="https://sdk.scdn.co/spotify-player.js"></script>
-                  </div>
-
-                  <script src="/scripts.js"></script>
-              </div>
-          </body>
-          </html>
-
-        `);
+        
+        res.sendFile(path.join(__dirname, '..', 'components', 'dashboard.htm'));
+          
       })
       .catch(error => {
         console.error('Error fetching user data:', error);

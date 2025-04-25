@@ -1,0 +1,299 @@
+{
+  "selectedPlaylists": [
+    {
+      "collaborative": false,
+      "description": "Hot off the press and freshly curated for you, Noctis Magazine presents the best new music of the week. ",
+      "external_urls": {
+        "spotify": "https://open.spotify.com/playlist/5K90H2n44UPY72YFCoHIIA"
+      },
+      "href": "https://api.spotify.com/v1/playlists/5K90H2n44UPY72YFCoHIIA",
+      "id": "5K90H2n44UPY72YFCoHIIA",
+      "images": [
+        {
+          "height": null,
+          "url": "https://image-cdn-fa.spotifycdn.com/image/ab67706c0000da8451b2a193c49e543ed87e4afc",
+          "width": null
+        }
+      ],
+      "name": "Best Of The Week ",
+      "owner": {
+        "display_name": "Noctis Magazine",
+        "external_urls": {
+          "spotify": "https://open.spotify.com/user/2r7zf7ptlnctbt9rtc4r41mq9"
+        },
+        "href": "https://api.spotify.com/v1/users/2r7zf7ptlnctbt9rtc4r41mq9",
+        "id": "2r7zf7ptlnctbt9rtc4r41mq9",
+        "type": "user",
+        "uri": "spotify:user:2r7zf7ptlnctbt9rtc4r41mq9"
+      },
+      "primary_color": null,
+      "public": true,
+      "snapshot_id": "AABCqRWMreJOz4IKlMSZmKElmHaFvvZp",
+      "tracks": {
+        "href": "https://api.spotify.com/v1/playlists/5K90H2n44UPY72YFCoHIIA/tracks",
+        "total": 37
+      },
+      "type": "playlist",
+      "uri": "spotify:playlist:5K90H2n44UPY72YFCoHIIA"
+    },
+    {
+      "collaborative": false,
+      "description": "Updated weekly. (Photo: Tunde Adebimpe)",
+      "external_urls": {
+        "spotify": "https://open.spotify.com/playlist/5X8lN5fZSrLnXzFtDEUwb9"
+      },
+      "href": "https://api.spotify.com/v1/playlists/5X8lN5fZSrLnXzFtDEUwb9",
+      "id": "5X8lN5fZSrLnXzFtDEUwb9",
+      "images": [
+        {
+          "height": null,
+          "url": "https://image-cdn-ak.spotifycdn.com/image/ab67706c0000d72cd0742ce9fa392e17e2bb81a2",
+          "width": null
+        }
+      ],
+      "name": "NPR Music's New Music Friday",
+      "owner": {
+        "display_name": "NPR Music",
+        "external_urls": {
+          "spotify": "https://open.spotify.com/user/npr_music"
+        },
+        "href": "https://api.spotify.com/v1/users/npr_music",
+        "id": "npr_music",
+        "type": "user",
+        "uri": "spotify:user:npr_music"
+      },
+      "primary_color": null,
+      "public": true,
+      "snapshot_id": "AAA+lxXkygeT4AQcC8LEuIZ9ALC441cN",
+      "tracks": {
+        "href": "https://api.spotify.com/v1/playlists/5X8lN5fZSrLnXzFtDEUwb9/tracks",
+        "total": 58
+      },
+      "type": "playlist",
+      "uri": "spotify:playlist:5X8lN5fZSrLnXzFtDEUwb9"
+    },
+    {
+      "collaborative": false,
+      "description": "20 of our favorite songs, as recently featured on indieshuffle.com.",
+      "external_urls": {
+        "spotify": "https://open.spotify.com/playlist/0OUw5nVdejTj3pEA4IYz5d"
+      },
+      "href": "https://api.spotify.com/v1/playlists/0OUw5nVdejTj3pEA4IYz5d",
+      "id": "0OUw5nVdejTj3pEA4IYz5d",
+      "images": [
+        {
+          "height": null,
+          "url": "https://image-cdn-ak.spotifycdn.com/image/ab67706c0000da84f45a1d749d656ef82b58d655",
+          "width": null
+        }
+      ],
+      "name": "Indie Shuffle's Hot Picks",
+      "owner": {
+        "display_name": "indieshuffle.com",
+        "external_urls": {
+          "spotify": "https://open.spotify.com/user/indieshuffle"
+        },
+        "href": "https://api.spotify.com/v1/users/indieshuffle",
+        "id": "indieshuffle",
+        "type": "user",
+        "uri": "spotify:user:indieshuffle"
+      },
+      "primary_color": null,
+      "public": true,
+      "snapshot_id": "AAAR5aHRkkDzjOvZJevnncnOYvq32ARa",
+      "tracks": {
+        "href": "https://api.spotify.com/v1/playlists/0OUw5nVdejTj3pEA4IYz5d/tracks",
+        "total": 21
+      },
+      "type": "playlist",
+      "uri": "spotify:playlist:0OUw5nVdejTj3pEA4IYz5d"
+    },
+    {
+      "collaborative": false,
+      "description": "New music for those who don't follow the crowd, updated weekly by <a href=\"http://thelineofbestfit.com\">The Line of Best Fit</a>. Coverstars: <a href=\"https://open.spotify.com/artist/2l5zAkA5ErSzEplCC0gDu1?si=6a172bd35f184b42\">Patche</a>.",
+      "external_urls": {
+        "spotify": "https://open.spotify.com/playlist/5359l8Co8qztllR0Mxk4Zv"
+      },
+      "href": "https://api.spotify.com/v1/playlists/5359l8Co8qztllR0Mxk4Zv",
+      "id": "5359l8Co8qztllR0Mxk4Zv",
+      "images": [
+        {
+          "height": null,
+          "url": "https://image-cdn-ak.spotifycdn.com/image/ab67706c0000da8479894b44f6261737ff013427",
+          "width": null
+        }
+      ],
+      "name": "New Music Discovery",
+      "owner": {
+        "display_name": "The Line of Best Fit",
+        "external_urls": {
+          "spotify": "https://open.spotify.com/user/thelineofbestfit"
+        },
+        "href": "https://api.spotify.com/v1/users/thelineofbestfit",
+        "id": "thelineofbestfit",
+        "type": "user",
+        "uri": "spotify:user:thelineofbestfit"
+      },
+      "primary_color": null,
+      "public": true,
+      "snapshot_id": "AAAZAu0vKWrwPwdBe+HNL3R/0V5CFuLa",
+      "tracks": {
+        "href": "https://api.spotify.com/v1/playlists/5359l8Co8qztllR0Mxk4Zv/tracks",
+        "total": 40
+      },
+      "type": "playlist",
+      "uri": "spotify:playlist:5359l8Co8qztllR0Mxk4Zv"
+    },
+    {
+      "collaborative": false,
+      "description": "A weekly playlist of songs played on All Songs Considered, hosted by Bob Boilen. Subscribe to the podcast via <a href=\"https://open.spotify.com/show/10LYbliXlNZe1VStsTkcC0?si=mRYJNNJSQYiioj6QtfIBJw\">Spotify</a>.",
+      "external_urls": {
+        "spotify": "https://open.spotify.com/playlist/7ro9wf8vuSLGxStaC8t8Rv"
+      },
+      "href": "https://api.spotify.com/v1/playlists/7ro9wf8vuSLGxStaC8t8Rv",
+      "id": "7ro9wf8vuSLGxStaC8t8Rv",
+      "images": [
+        {
+          "height": null,
+          "url": "https://image-cdn-ak.spotifycdn.com/image/ab67706c0000d72c4f68e5897358bbdc5a4806d6",
+          "width": null
+        }
+      ],
+      "name": "All Songs Considered",
+      "owner": {
+        "display_name": "NPR Music",
+        "external_urls": {
+          "spotify": "https://open.spotify.com/user/npr_music"
+        },
+        "href": "https://api.spotify.com/v1/users/npr_music",
+        "id": "npr_music",
+        "type": "user",
+        "uri": "spotify:user:npr_music"
+      },
+      "primary_color": null,
+      "public": true,
+      "snapshot_id": "AAAGo/wIEEhYA3kpdJ5WX3WJumNtaElF",
+      "tracks": {
+        "href": "https://api.spotify.com/v1/playlists/7ro9wf8vuSLGxStaC8t8Rv/tracks",
+        "total": 55
+      },
+      "type": "playlist",
+      "uri": "spotify:playlist:7ro9wf8vuSLGxStaC8t8Rv"
+    },
+    {
+      "collaborative": false,
+      "description": "The tracks Pitchfork has on repeat.",
+      "external_urls": {
+        "spotify": "https://open.spotify.com/playlist/7f9o34JAe8ZSRq4GX7f0Ol"
+      },
+      "href": "https://api.spotify.com/v1/playlists/7f9o34JAe8ZSRq4GX7f0Ol",
+      "id": "7f9o34JAe8ZSRq4GX7f0Ol",
+      "images": [
+        {
+          "height": null,
+          "url": "https://image-cdn-fa.spotifycdn.com/image/ab67706c0000d72c94027442ec52849ff0aadc78",
+          "width": null
+        }
+      ],
+      "name": "Pitchfork Selects",
+      "owner": {
+        "display_name": "Pitchfork",
+        "external_urls": {
+          "spotify": "https://open.spotify.com/user/pitchfork"
+        },
+        "href": "https://api.spotify.com/v1/users/pitchfork",
+        "id": "pitchfork",
+        "type": "user",
+        "uri": "spotify:user:pitchfork"
+      },
+      "primary_color": null,
+      "public": true,
+      "snapshot_id": "AAAPsrb6DStvQDtBC4S8jWDx2T3QEUlw",
+      "tracks": {
+        "href": "https://api.spotify.com/v1/playlists/7f9o34JAe8ZSRq4GX7f0Ol/tracks",
+        "total": 723
+      },
+      "type": "playlist",
+      "uri": "spotify:playlist:7f9o34JAe8ZSRq4GX7f0Ol"
+    },
+    {
+      "collaborative": false,
+      "description": "A playlist of some of our favorite new songs, updated weekly. See our archived playlists for songs from previous weeks.",
+      "external_urls": {
+        "spotify": "https://open.spotify.com/playlist/0ZQcCFqc1ziBiC1fvrrbsT"
+      },
+      "href": "https://api.spotify.com/v1/playlists/0ZQcCFqc1ziBiC1fvrrbsT",
+      "id": "0ZQcCFqc1ziBiC1fvrrbsT",
+      "images": [
+        {
+          "height": null,
+          "url": "https://image-cdn-ak.spotifycdn.com/image/ab67706c0000d72c948dc1ea50cc4de7f51af94a",
+          "width": null
+        }
+      ],
+      "name": "BrooklynVegan Weekly Playlist",
+      "owner": {
+        "display_name": "BrooklynVegan",
+        "external_urls": {
+          "spotify": "https://open.spotify.com/user/brooklynvegan"
+        },
+        "href": "https://api.spotify.com/v1/users/brooklynvegan",
+        "id": "brooklynvegan",
+        "type": "user",
+        "uri": "spotify:user:brooklynvegan"
+      },
+      "primary_color": null,
+      "public": true,
+      "snapshot_id": "AAAXgK5bzn30pZ3QIiXHlLmsOXei+YAX",
+      "tracks": {
+        "href": "https://api.spotify.com/v1/playlists/0ZQcCFqc1ziBiC1fvrrbsT/tracks",
+        "total": 25
+      },
+      "type": "playlist",
+      "uri": "spotify:playlist:0ZQcCFqc1ziBiC1fvrrbsT"
+    },
+    {
+      "collaborative": false,
+      "description": "Auto based on top weekly posts in subreddit r&#x2F;ListenToThis!",
+      "external_urls": {
+        "spotify": "https://open.spotify.com/playlist/4hVtCaXGIw8cjQXa1McxgI"
+      },
+      "href": "https://api.spotify.com/v1/playlists/4hVtCaXGIw8cjQXa1McxgI",
+      "id": "4hVtCaXGIw8cjQXa1McxgI",
+      "images": [
+        {
+          "height": null,
+          "url": "https://image-cdn-ak.spotifycdn.com/image/ab67706c0000da84fa957ca0ac699fb78ffd1e97",
+          "width": null
+        }
+      ],
+      "name": "r/ListenToThis | Top weekly posts",
+      "owner": {
+        "display_name": "Listige",
+        "external_urls": {
+          "spotify": "https://open.spotify.com/user/v9iqfai0ejp8rgcb2sx9n6yis"
+        },
+        "href": "https://api.spotify.com/v1/users/v9iqfai0ejp8rgcb2sx9n6yis",
+        "id": "v9iqfai0ejp8rgcb2sx9n6yis",
+        "type": "user",
+        "uri": "spotify:user:v9iqfai0ejp8rgcb2sx9n6yis"
+      },
+      "primary_color": null,
+      "public": true,
+      "snapshot_id": "AABQsRUErhPLtWUtGo1BgGbuP0iyrj8C",
+      "tracks": {
+        "href": "https://api.spotify.com/v1/playlists/4hVtCaXGIw8cjQXa1McxgI/tracks",
+        "total": 50
+      },
+      "type": "playlist",
+      "uri": "spotify:playlist:4hVtCaXGIw8cjQXa1McxgI"
+    }
+  ],
+  "selectedURLs": [
+    "https://open.spotify.com/playlist/37i9dQZF1DWWjGdmeTyeJ6",
+    "https://open.spotify.com/playlist/37i9dQZF1DX5C8ObEZ48JQ",
+    "https://open.spotify.com/playlist/37i9dQZEVXcMyZVrUpCKOR",
+    "https://open.spotify.com/playlist/37i9dQZF1DWT0upuUFtT7o",
+    "https://open.spotify.com/playlist/37i9dQZF1DX3EbcelyrZPd"
+  ]
+}
