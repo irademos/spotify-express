@@ -202,55 +202,33 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    async function aiTalk() {
-        await loadCities();
-        
-        // Step 1: Get user location using the Geolocation API
-        if (navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition(async (position) => {
-                const latitude = position.coords.latitude;
-                const longitude = position.coords.longitude;
-                console.log('User Location:', latitude, longitude);
-                
-                // Step 2: Determine nearest big city (you can improve this step with a more sophisticated method)
-                const nearestCity = await getNearestCity(latitude, longitude); // Placeholder for city retrieval
-                const prompt = `List 20 well known local bands in ${nearestCity.city}, ${nearestCity.state_name} or a nearby big city. Respond in this format exactly: BandName: Description. One per line. No numbers, no asterisks, no bullet points, no extra text or explanation.`
-                
-                // ai prompt
-                let bandsResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-                    method: "POST",
-                    headers: {
-                        "Authorization": `Bearer ${window.or_key}`,
-                        "Content-Type": "application/json"
-                    },
-                    body: JSON.stringify({
-                        messages: [{ 
-                            role: "user", 
-                            content: prompt
-                        }],
-                        stream: false,
-                    })
-                });
+    async function aiPrompt(prompt) {
+        // ai prompt
+        let response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+            method: "POST",
+            headers: {
+                "Authorization": `Bearer ${window.or_key}`,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                messages: [{ 
+                    role: "user", 
+                    content: prompt
+                }],
+                stream: false,
+            })
+        });
 
-                let bandsData = await bandsResponse.json();
-                let bandsReply = bandsData.choices?.[0]?.message?.content;
-                let bands = null;
-                if (bandsReply) {
-                    console.log('AI:', bandsReply);
-                    bands = parseBands(bandsReply); // Parse the band list from the AI response
-                    playBandSongsSequentially(bands);
-                } else {
-                    bandsResponse = await getGroqResponse(prompt);
-                    bandsReply = bandsResponse.choices?.[0]?.message?.content;
-                    console.log(bandsReply)
-                    bands = parseBands(bandsReply); // Parse the band list from the AI response
-                    playBandSongsSequentially(bands);
-                }
-            }, (error) => {
-                console.error('Geolocation error:', error);
-            });
+        let data = await response.json();
+        let reply = data.choices?.[0]?.message?.content;
+        if (reply) {
+            console.log('AI:', reply);
+            return reply;
         } else {
-            console.error('Geolocation is not supported by this browser.');
+            response = await getGroqResponse(prompt);
+            reply = response.choices?.[0]?.message?.content;
+            console.log(reply);
+            return reply;
         }
     }
 
@@ -325,10 +303,176 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    async function getCurrentPlayingTrack() {
+        try {
+            const response = await fetchWithSpotifyAuth('https://api.spotify.com/v1/me/player/currently-playing', {
+                method: 'GET',
+                headers: {}
+            });
+    
+            if (response.status === 204) {
+                console.log('Nothing currently playing.');
+                return null;
+            }
+    
+            if (!response.ok) {
+                console.error('Error fetching current track:', response.statusText);
+                return null;
+            }
+    
+            const data = await response.json();
+            const trackName = data.item.name;
+            const artistName = data.item.artists.map(artist => artist.name).join(', ');
+            const trackId = data.item.id; // <-- Add this
+    
+            console.log(`Now playing: ${trackName} by ${artistName}`);
+            return { trackName, artistName, trackId }; // <-- Include trackId
+        } catch (error) {
+            console.error('Fetch error:', error);
+            return null;
+        }
+    }
+    
+
+    let lastTrackId = null;
+    function onTrackChange(callback) {
+        async function poll() {
+            while (true) {
+                const trackInfo = await getCurrentPlayingTrack();
+                if (trackInfo && trackInfo.trackId !== lastTrackId) {
+                    lastTrackId = trackInfo.trackId;
+                    await callback(trackInfo);  // <-- await here!
+                }
+                await new Promise(resolve => setTimeout(resolve, 3000));  // <-- delay manually
+            }
+        }
+    
+        poll(); // Start the loop
+    }
+
+    async function waitForTrackToStart(timeoutMs = 10000, pollIntervalMs = 1000) {
+        const startTime = Date.now();
+        let trackInfo = null;
+    
+        while (!trackInfo) {
+            if (Date.now() - startTime > timeoutMs) {
+                console.log('Timeout reached. No track is currently playing.');
+                return null; // Stop waiting after timeout
+            }
+    
+            trackInfo = await getCurrentPlayingTrack();
+    
+            if (trackInfo) {
+                console.log(`Now playing: ${trackInfo.trackName} by ${trackInfo.artistName}`);
+                return trackInfo;
+            }
+    
+            await new Promise(resolve => setTimeout(resolve, pollIntervalMs)); // Wait before retrying
+        }
+    }    
+
+    async function aiTalk() {
+        await loadCities();
+        
+        // Get user location
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(async (position) => {
+                const latitude = position.coords.latitude;
+                const longitude = position.coords.longitude;
+                console.log('User Location:', latitude, longitude);
+                
+                // Get nearest city
+                const nearestCity = await getNearestCity(latitude, longitude);
+                
+                // ai prompt
+                const prompt = `List 20 well known local bands in ${nearestCity.city}, ${nearestCity.state_name} or a nearby big city. Respond in this format exactly: BandName: Description. One per line. No numbers, no asterisks, no bullet points, no extra text or explanation.`
+                let bandsReply = await aiPrompt(prompt);
+
+                // Parse the band list
+                bands = parseBands(bandsReply);
+                
+                // Play songs from each band
+                playBandSongsSequentially(bands);
+            }, (error) => {
+                console.error('Geolocation error:', error);
+            });
+        } else {
+            console.error('Geolocation is not supported by this browser.');
+        }
+    }
+
+    async function announceTrack(trackInfo) {
+        await loadCities();
+    
+        // Get user location
+        console.log(`Now playing: ${trackInfo.trackName} by ${trackInfo.artistName}`);
+
+        const prompt = `Provide an interesting fact or two about the band ${trackInfo.artistName}. Don't say anything about the genre, style or influences of the music. Use the following format:
+location: [City or country where the band is from]
+fact: [One or two sentences with an interesting fact about the band]`;
+
+        const responseText = await aiPrompt(prompt);
+        const lines = responseText.split('\n');
+        let location = '';
+        let fact = '';
+
+        lines.forEach(line => {
+            const [key, ...rest] = line.split(':');
+            const value = rest.join(':').trim();
+            if (key.trim().toLowerCase() === 'location') {
+                location = value;
+            } else if (key.trim().toLowerCase() === 'fact') {
+                fact = value;
+            }
+        });
+
+        if (location && fact) {
+            const speech_text = `From ${location}. ${fact}`;
+            const bandUtterance = new SpeechSynthesisUtterance(speech_text);
+            let paused = false;
+
+            let volumePercent = 40;
+            let response = await fetchWithSpotifyAuth(`https://api.spotify.com/v1/me/player/volume?volume_percent=${volumePercent}`, {
+                method: 'PUT'
+            });
+            if (!response.ok) {
+                response = await fetchWithSpotifyAuth(`https://api.spotify.com/v1/me/player/pause`, { method: 'PUT' });
+                if (!response.ok) {
+                    console.error("error pausing or lowering volume.");
+                    return;
+                }
+                paused = true;
+            }
+
+            speechSynthesis.speak(bandUtterance);
+
+            await new Promise(resolve => bandUtterance.onend = resolve);
+
+            if (paused) {
+                await fetchWithSpotifyAuth('https://api.spotify.com/v1/me/player/play', { method: 'PUT' });
+            } else {
+                volumePercent = 100;
+                response = await fetchWithSpotifyAuth(`https://api.spotify.com/v1/me/player/volume?volume_percent=${volumePercent}`, {
+                    method: 'PUT'
+                });
+            }
+        }
+    }
+     
+
+    function startAnnouncing() {
+        onTrackChange(async (trackInfo) => {
+            await announceTrack(trackInfo);
+        });
+    }
+    
+    
     // Attach to button
-    document.getElementById("playButton").addEventListener("click", () => {
+    document.getElementById("roadTrip").addEventListener("click", () => {
         // playTrack(testTrackUri);
         aiTalk();
     });
     document.getElementById("setDevice").addEventListener("click", setDevice);
+    document.getElementById("announceTracks").addEventListener("click", startAnnouncing);
+
 });

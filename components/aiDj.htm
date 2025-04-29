@@ -12,11 +12,24 @@
         <p>Welcome, <span id="userDisplayName"></span></p>
         <div id="content"></div>
         <div id="mainContentTemplate">
-            <button id="setDevice">Set Device</button>
+            <button id="setDevice" title="Select a Spotify device by clicking on a list item">Show Devices</button>
             <ul id="devicesList"></ul><br>
-            <button id="playButton">AI DJ Beta</button><br>
+        
+            <button 
+                id="roadTrip" 
+                title="AI will curate a road trip playlist of local bands and narrate cool facts along the way. Spotify must be open and active (click play on any song)">
+                Road Trip DJ
+            </button><br><br>
+        
+            <button 
+                id="announceTracks" 
+                title="Announce the next track and fun facts between your chosen songs. You must play the songs or playlist from Spotify">
+                Announce Tracks
+            </button><br>
+        
             <script src="https://sdk.scdn.co/spotify-player.js"></script>
         </div>
+        
         <script src="/utils.js"></script>
         <script src="/aiDj.js"></script>
     </div>
