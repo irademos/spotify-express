@@ -51,22 +51,20 @@ app.get('/ai-dj', function (req, res) {
   res.sendFile(path.join(__dirname, '..', 'components', 'aiDj.htm'));
 });
 
-app.get('/scrape', function (req, res) {
+app.get('/api/scrape', function (req, res) {
   const url = req.query.url;
   if (!url) {
       return res.status(400).send('URL parameter is missing');
   }
 
-  console.log("Here");
+  console.log("Scraping:", url);
 
   axios.get(url).then(async response => {
-      
       const $ = cheerio.load(response.data);
       const tracks: Track[] = [];
       $('div.Box__BoxComponent-sc-y4nds-0').each((_, el) => {
           const trackName = $(el).find('span.ListRowTitle__LineClamp-sc-1xe2if1-0').text().trim();
           const artistName = $(el).find('p.ListRowDetails__ListRowDetailText-sc-sozu4l-0').text().trim();
-          
           if (trackName && artistName) {
               tracks.push({ track: trackName, artist: artistName });
           }
@@ -76,12 +74,11 @@ app.get('/scrape', function (req, res) {
           return res.status(404).send('No tracks found in the playlist');
       }
 
-      res.status(200).json(tracks);  // Respond with the tracks in JSON format
-  })
-  .catch(error => {
-      console.log(error);
+      res.status(200).json(tracks);
+  }).catch(error => {
+      console.log('Scrape error:', error);
+      res.status(500).send('Scrape failed');
   });
-  
 });
 
 app.get('/api/me', (req, res) => {
