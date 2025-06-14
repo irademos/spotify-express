@@ -255,48 +255,78 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
     
-            let trackUris = [];
-    
-            // Loop through selected playlists and filter tracks
+            let uniqueTracks = new Map(); // Map<artistName, { uri, artistId, trackName }>
+            let trackSet = new Set(); // To track duplicate songs
+
+            // Selected Playlists
             for (const playlist of selectedPlaylists) {
                 const playlistTracksResponse = await fetchWithSpotifyAuth(`https://api.spotify.com/v1/playlists/${playlist.id}/tracks`, {
                     headers: {}
                 });
                 const playlistTracksData = await playlistTracksResponse.json();
-    
-                const filteredTracks = playlistTracksData.items.filter(item => {
+
+                for (const item of playlistTracksData.items) {
                     const addedAt = new Date(item.added_at);
-                    return addedAt >= cutoffDate;
-                }).map(item => item.track.uri);
-    
-                trackUris = trackUris.concat(filteredTracks);
+                    if (addedAt < cutoffDate) continue;
+
+                    const track = item.track;
+                    const artist = track.artists[0]; // use primary artist
+                    const trackUri = track.uri;
+                    const trackId = track.id;
+
+                    if (!trackSet.has(trackUri) && !uniqueTracks.has(artist.name)) {
+                        uniqueTracks.set(artist.name, {
+                            uri: trackUri,
+                            artistId: artist.id,
+                            trackName: track.name
+                        });
+                        trackSet.add(trackUri);
+                    }
+                }
             }
-    
-            // Loop through selected URLs and scrape tracks
+
+            // Selected URLs
             for (const url of selectedURLs) {
                 try {
-                    const response = await scrapePlaylist(url);
-                    for (const scraped of response) {
-                        const uri = await getUriForTrack(scraped);
-                        if (uri) {
-                            trackUris.push(uri);
-                        } else {
-                            console.warn(`Track not found: ${query}`);
+                    const scraped = await scrapePlaylist(url); // [{ track, artist }]
+                    for (const { track, artist } of scraped) {
+                        const uriInfo = await getUriForTrack({ track, artist }); // returns { uri, artistId }
+                        if (uriInfo && !trackSet.has(uriInfo.uri) && !uniqueTracks.has(artist)) {
+                            uniqueTracks.set(artist, {
+                                uri: uriInfo.uri,
+                                artistId: uriInfo.artistId,
+                                trackName: track
+                            });
+                            trackSet.add(uriInfo.uri);
                         }
                     }
                 } catch (error) {
                     console.error('Error scraping playlist from URL:', url, error);
                 }
             }
-    
-            // Add filtered tracks to the new playlist in batches (max 100 per request)
-            for (let i = 0; i < trackUris.length; i += 100) {
+
+            // Fetch monthly listeners
+            async function getMonthlyListeners(artistId) {
+                const res = await fetchWithSpotifyAuth(`https://api.spotify.com/v1/artists/${artistId}`);
+                const data = await res.json();
+                return data.followers.total || 0; // fallback
+            }
+
+            const trackEntries = Array.from(uniqueTracks.values());
+            for (const entry of trackEntries) {
+                entry.monthlyListeners = await getMonthlyListeners(entry.artistId);
+            }
+
+            // Sort by least to most monthly listeners
+            trackEntries.sort((a, b) => a.monthlyListeners - b.monthlyListeners);
+
+            // Add to playlist
+            for (let i = 0; i < trackEntries.length; i += 100) {
+                const batchUris = trackEntries.slice(i, i + 100).map(entry => entry.uri);
                 await fetchWithSpotifyAuth(`https://api.spotify.com/v1/playlists/${newPlaylistId}/tracks`, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ uris: trackUris.slice(i, i + 100) })
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ uris: batchUris })
                 });
             }
     
