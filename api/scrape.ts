@@ -1,8 +1,9 @@
 // import { VercelRequest, VercelResponse } from '@vercel/node';
 import axios from 'axios';
 import * as cheerio from 'cheerio';
+import { Request, Response } from 'express';
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: Request, res: Response) {
   const url = req.query.url;
   if (!url || typeof url !== 'string') {
     return res.status(400).send('URL parameter is missing or invalid');
