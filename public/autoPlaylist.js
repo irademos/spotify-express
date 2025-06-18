@@ -305,6 +305,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
             // Fetch monthly listeners
             async function getMonthlyListeners(artistId) {
+                if (!artistId) {
+                    console.warn('Artist ID is undefined or null');
+                    return 0;
+                }
+                console.log("Getting listeners for artist ID:", artistId);
                 const res = await fetchWithSpotifyAuth(`https://api.spotify.com/v1/artists/${artistId}`);
                 if (!res.ok) return 0;
                 const data = await res.json();
