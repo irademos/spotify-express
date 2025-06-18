@@ -9,6 +9,7 @@ const bodyParser = require('body-parser');
 const path = require('path');
 const cookieParser = require('cookie-parser');
 const refreshRoute = require('./refresh');
+import scrapeHandler from './scrape';
 
 app.use(cookieParser());
 app.use(bodyParser.json());
@@ -80,6 +81,9 @@ app.get('/ai-dj', function (req, res) {
 //       res.status(500).send('Scrape failed');
 //   });
 // });
+
+
+app.get('/api/scrape', (req, res) => scrapeHandler(req as any, res as any));
 
 app.get('/api/me', (req, res) => {
   const accessToken = req.cookies.spotifyAccessToken;
