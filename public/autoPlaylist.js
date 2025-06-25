@@ -169,11 +169,16 @@ document.addEventListener('DOMContentLoaded', function() {
     // Discover: "https://open.spotify.com/playlist/37i9dQZEVXcMyZVrUpCKOR"
     async function scrapePlaylist(url) {
         try {
-            const res = await fetch(`/api/scrape?url=${encodeURIComponent(url)}`);
-            if (!res.ok) throw new Error('Failed to fetch data');
-            const data = await res.json();
-            console.log(data);
-            return data;
+            // const res = await fetch(`/scrape?url=${encodeURIComponent(url)}`);
+            fetch(`/api/scrape?url=${encodeURIComponent(url)}`)
+            .then(response => response.json())
+            .then(ret_val => {
+                // if (!res.ok) throw new Error('Failed to fetch data');
+                console.log(ret_val);
+                return ret_val;
+            })
+            .catch(error => console.error('Error fetching config:', error));
+            
         } catch (error) {
             console.error('Error during scrape:', error);
             return [];
@@ -197,6 +202,14 @@ document.addEventListener('DOMContentLoaded', function() {
         // Basic URL validation (you can improve it)
         const regex = /^(https?|ftp):\/\/[^\s/$.?#].[^\s]*$/i;
         return regex.test(url);
+    }
+
+    async function testDiscover() { 
+        // window.open('/api/download?url=' + encodeURIComponent("https://open.spotify.com/playlist/37i9dQZF1DWWjGdmeTyeJ6"));
+        // const res = await fetch(`/api/test-discover?id=37i9dQZF1DWWjGdmeTyeJ6`);
+        // if (!res.ok) throw new Error("Failed to get playlist tracks");
+        // return await res.json();
+        console.log('button pressed!')
     }
 
     async function createPlaylist() {   
@@ -276,8 +289,10 @@ document.addEventListener('DOMContentLoaded', function() {
                         uniqueTracks.set(artist.name, {
                             uri: trackUri,
                             artistId: artist.id,
-                            trackName: track.name
+                            trackName: track.name,
+                            playlistName: playlist.name
                         });
+
                         trackSet.add(trackUri);
                     }
                 }
@@ -286,14 +301,17 @@ document.addEventListener('DOMContentLoaded', function() {
             // Selected URLs
             for (const url of selectedURLs) {
                 try {
-                    const scraped = await scrapePlaylist(url); // [{ track, artist }]
+                    const scraped = await scrapeHTMLTracks(url); // [{ track, artist }]
+                    console.log(scraped)
                     for (const { track, artist } of scraped) {
                         const uriInfo = await getUriForTrack({ track, artist }); // returns { uri, artistId }
+                        console.log(uriInfo)
                         if (uriInfo && !trackSet.has(uriInfo.uri) && !uniqueTracks.has(artist)) {
                             uniqueTracks.set(artist, {
                                 uri: uriInfo.uri,
                                 artistId: uriInfo.artistId,
-                                trackName: track
+                                trackName: track,
+                                playlistName: url
                             });
                             trackSet.add(uriInfo.uri);
                         }
@@ -306,59 +324,164 @@ document.addEventListener('DOMContentLoaded', function() {
             // Fetch monthly listeners
             async function getMonthlyListeners(artistId) {
                 if (!artistId) {
-                    console.warn('Artist ID is undefined or null');
+                    console.warn('Artist ID is missing');
                     return 0;
                 }
-                console.log("Getting listeners for artist ID:", artistId);
-                const res = await fetchWithSpotifyAuth(`https://api.spotify.com/v1/artists/${artistId}`);
-                if (!res.ok) return 0;
-                const data = await res.json();
-                return data.followers.total || 0; // fallback
-            }
 
+                console.log("Getting listeners for artist ID:", artistId);
+
+                try {
+                    const res = await fetchWithSpotifyAuth(`https://api.spotify.com/v1/artists/${artistId}`);
+                    if (!res.ok) {
+                        if (res.status === 429) {
+                            const retryAfter = res.headers.get("Retry-After");
+                            const waitTime = (retryAfter ? parseInt(retryAfter) : 1) * 1000;
+                            console.warn(`Rate limited. Waiting ${waitTime}ms...`);
+                            await sleep(waitTime);
+                            return await getMonthlyListeners(artistId); // retry
+                        }
+                        return 0;
+                    }
+
+                    const data = await res.json();
+                    return data.followers?.total || 0;
+
+                } catch (error) {
+                    console.error('Fetch failed:', error);
+                    return 0;
+                }
+            }
+            
             const trackEntries = Array.from(uniqueTracks.values());
             for (const entry of trackEntries) {
-                entry.monthlyListeners = await getMonthlyListeners(entry.artistId) || 0;
+                try {
+                    await sleep(60); // 60 ms delay between requests
+                    entry.monthlyListeners = await getMonthlyListeners(entry.artistId) || 0;
+                    console.log(entry.monthlyListeners);
+                } catch (error) {
+                    console.log('Error getting listeners:', error);
+                    entry.monthlyListeners = 0;
+                }
             }
 
             // Sort by least to most monthly listeners
             trackEntries.sort((a, b) => a.monthlyListeners - b.monthlyListeners);
+            console.log(trackEntries, trackEntries.length);
 
             // Add to playlist
             for (let i = 0; i < trackEntries.length; i += 100) {
                 const batchUris = trackEntries.slice(i, i + 100).map(entry => entry.uri);
-                await fetchWithSpotifyAuth(`https://api.spotify.com/v1/playlists/${newPlaylistId}/tracks`, {
+                await fetchWithSpotifyAuth(`https://api.spotify.com/v1/playlists/${newPlaylistId}/tracks?position=${i}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ uris: batchUris })
                 });
             }
-    
+
+            // save to file for debug
+            const lines = [];
+            for (const entry of trackEntries) {
+                const { trackName, uri, artistId, playlistName } = entry;
+                const artistName = [...uniqueTracks.entries()]
+                    .find(([, val]) => val.uri === uri)?.[0] || 'Unknown Artist';
+
+                lines.push(`${trackName} - ${artistName} - ${playlistName || 'Unknown Playlist'}`);
+            }
+
+            const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'playlist_tracks.txt';
+            a.click();
+            URL.revokeObjectURL(url);
+
             alert('Playlist created successfully!');
+
         } catch (error) {
             console.error('Error creating playlist:', error);
         }
     }
 
-    async function getUriForTrack(scraped) {
-        const query = `${scraped.track} ${scraped.artist}`;
+    function sleep(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    async function getUriForTrack({ track, artist }) {
+        const query = `${track} ${artist}`;
         const searchParams = new URLSearchParams({ q: query, type: 'track', limit: 1 });
 
         try {
             const searchResponse = await fetchWithSpotifyAuth(`https://api.spotify.com/v1/search?${searchParams}`, {
-                headers: {
-                    'Content-Type': 'application/json'
-                }
+                headers: { 'Content-Type': 'application/json' }
             });
-            const searchData = await searchResponse.json();
 
-            const uri = searchData.tracks?.items?.[0]?.uri;
-            return uri;
+            const searchData = await searchResponse.json();
+            const item = searchData.tracks?.items?.[0];
+
+            if (!item) return null;
+
+            return {
+                uri: item.uri,
+                artistId: item.artists?.[0]?.id ?? null,
+            };
         } catch (searchError) {
             console.error(`Error searching track: ${query}`, searchError);
             return null;
         }
     }
+
+
+    async function scrapeHTMLTracks(url) {
+        const res = await fetch('/api/scrape-html-tracks?url=' + encodeURIComponent(url));
+        if (!res.ok) {
+            console.error("Failed to fetch track links");
+            return [];
+        }
+
+        const trackLinks = await res.json();  // Parse the JSON response
+        const resolvedTracks = [];
+
+        for (const link of trackLinks) {
+            const track = await getTrackNameAndArtistFromUrl(link);
+            if (track) resolvedTracks.push(track);
+        }
+
+        return resolvedTracks;
+    }
+
+    async function getTrackNameAndArtistFromUrl(trackUrl) {
+        // Extract the track ID from the URL
+        const match = trackUrl.match(/track\/([a-zA-Z0-9]+)/);
+        if (!match) {
+            console.error('Invalid track URL:', trackUrl);
+            return null;
+        }
+
+        const trackId = match[1];
+        const apiUrl = `https://api.spotify.com/v1/tracks/${trackId}`;
+
+        try {
+            const response = await fetchWithSpotifyAuth(apiUrl, {
+                headers: { 'Content-Type': 'application/json' }
+            });
+
+            if (!response.ok) {
+                console.error(`Failed to fetch track: ${response.status} ${response.statusText}`);
+                return null;
+            }
+
+            const data = await response.json();
+            const trackName = data.name;
+            const artistName = data.artists.map(a => a.name).join(', ');
+
+            return { track: trackName, artist: artistName };
+        } catch (err) {
+            console.error('Error fetching track info:', err);
+            return null;
+        }
+    }
+
     
     async function refreshAccessToken(refreshToken) {
         const response = await fetch('/api/refresh', {
@@ -379,5 +502,6 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById("downloadFileButton").addEventListener("click", downloadSelectedPlaylists);
     document.getElementById("uploadFileInput").addEventListener("change", uploadPlaylistData);
     document.getElementById("createPlaylistButton").addEventListener("click", createPlaylist);
+    document.getElementById("testDiscover").addEventListener("click", testDiscover);
     document.getElementById("addButton").addEventListener("click", addURL);
 });

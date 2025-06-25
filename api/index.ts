@@ -9,7 +9,6 @@ const bodyParser = require('body-parser');
 const path = require('path');
 const cookieParser = require('cookie-parser');
 const refreshRoute = require('./refresh');
-import scrapeHandler from './scrape';
 
 app.use(cookieParser());
 app.use(bodyParser.json());
@@ -52,38 +51,79 @@ app.get('/ai-dj', function (req, res) {
   res.sendFile(path.join(__dirname, '..', 'components', 'aiDj.htm'));
 });
 
-// app.get('/api/scrape', function (req, res) {
-//   const url = req.query.url;
-//   if (!url) {
-//       return res.status(400).send('URL parameter is missing');
-//   }
+app.get('/api/scape-html-only', async (req, res) => {
+    const url = req.query.url as string;
+    if (!url) return res.status(400).send('Missing URL');
 
-//   console.log("Scraping:", url);
+    try {
+        const response = await axios.get(url);
+        res.setHeader('Content-Type', 'text/plain');
+        res.send(response.data); // This is the raw HTML as a string
+    } catch (err) {
+        console.error('Error fetching URL:', err);
+        res.status(500).send('Failed to fetch URL');
+    }
+});
 
-//   axios.get(url).then(async response => {
-//       const $ = cheerio.load(response.data);
-//       const tracks: Track[] = [];
-//       $('div.Box__BoxComponent-sc-y4nds-0').each((_, el) => {
-//           const trackName = $(el).find('span.ListRowTitle__LineClamp-sc-1xe2if1-0').text().trim();
-//           const artistName = $(el).find('p.ListRowDetails__ListRowDetailText-sc-sozu4l-0').text().trim();
-//           if (trackName && artistName) {
-//               tracks.push({ track: trackName, artist: artistName });
-//           }
-//       });
+app.get('/api/scrape-html-tracks', async (req, res) => {
+    const url = req.query.url as string;
+    if (!url) return res.status(400).send('Missing URL');
 
-//       if (tracks.length === 0) {
-//           return res.status(404).send('No tracks found in the playlist');
-//       }
+    try {
+        const response = await axios.get(url);
+        const $ = cheerio.load(response.data);
 
-//       res.status(200).json(tracks);
-//   }).catch(error => {
-//       console.log('Scrape error:', error);
-//       res.status(500).send('Scrape failed');
-//   });
-// });
+        const trackLinks: string[] = [];
+        $('meta[name="music:song"]').each((_, el) => {
+            const link = $(el).attr('content');
+            if (link) trackLinks.push(link);
+        });
 
+        res.json(trackLinks);
 
-app.get('/api/scrape', (req, res) => scrapeHandler(req as any, res as any));
+        // const output = trackLinks.join('\n');
+        // res.setHeader('Content-Type', 'text/plain');
+        // res.setHeader('Content-Disposition', 'attachment; filename=tracks.txt');
+        // res.send(output);
+    } catch (err) {
+        console.error('Download error:', err);
+        res.status(500).send('Failed to fetch playlist');
+    }
+});
+
+app.get('/api/scrape', function (req, res) {
+  console.log("here for scrape.")
+  const url = req.query.url;
+  if (!url) {
+      return res.status(400).send('URL parameter is missing');
+  }
+
+  console.log("Scraping:", url);
+
+  axios.get(url).then(async response => {
+      const $ = cheerio.load(response.data);
+      console.log($);
+      const tracks: Track[] = [];
+      $('div.Box__BoxComponent-sc-y4nds-0').each((_, el) => {
+          const trackName = $(el).find('span.ListRowTitle__LineClamp-sc-1xe2if1-0').text().trim();
+          const artistName = $(el).find('p.ListRowDetails__ListRowDetailText-sc-sozu4l-0').text().trim();
+          if (trackName && artistName) {
+              tracks.push({ track: trackName, artist: artistName });
+          }
+      });
+
+      if (tracks.length === 0) {
+          return res.status(404).send('No tracks found in the playlist');
+      }
+
+      console.log(tracks)
+
+      res.status(200).json(tracks);
+  }).catch(error => {
+      console.log('Scrape error:', error);
+      res.status(500).send('Scrape failed');
+  });
+});
 
 app.get('/api/me', (req, res) => {
   const accessToken = req.cookies.spotifyAccessToken;
