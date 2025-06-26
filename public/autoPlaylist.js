@@ -206,7 +206,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     async function testDiscover() { 
-        // window.open('/api/download?url=' + encodeURIComponent("https://open.spotify.com/playlist/37i9dQZF1DWWjGdmeTyeJ6"));
+        window.open('/api/test-discover?url=' + encodeURIComponent("https://open.spotify.com/playlist/37i9dQZF1DWWjGdmeTyeJ6"));
         // const res = await fetch(`/api/test-discover?id=37i9dQZF1DWWjGdmeTyeJ6`);
         // if (!res.ok) throw new Error("Failed to get playlist tracks");
         // return await res.json();
@@ -315,9 +315,10 @@ document.addEventListener('DOMContentLoaded', function() {
             for (const url of selectedURLs) {
                 try {
                     createPlistLog(`Getting tracks from ${url}.`);
-                    const scraped = await scrapeHTMLTracks(url); // [{ track, artist }]
+                    const scraped = await scrapeHTMLTracks(url);
+                    const { tracks, playlistName } = scraped;
                     console.log(scraped)
-                    for (const { track, artist } of scraped) {
+                    for (const { track, artist } of tracks) {
                         const uriInfo = await getUriForTrack({ track, artist }); // returns { uri, artistId }
                         console.log(uriInfo)
                         if (uriInfo && !trackSet.has(uriInfo.uri) && !uniqueTracks.has(artist)) {
@@ -325,7 +326,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                 uri: uriInfo.uri,
                                 artistId: uriInfo.artistId,
                                 trackName: track,
-                                playlistName: url
+                                playlistName: playlistName
                             });
                             trackSet.add(uriInfo.uri);
                         }
@@ -448,7 +449,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-
     async function scrapeHTMLTracks(url) {
         const res = await fetch('/api/scrape-html-tracks?url=' + encodeURIComponent(url));
         if (!res.ok) {
@@ -456,7 +456,10 @@ document.addEventListener('DOMContentLoaded', function() {
             return [];
         }
 
-        const trackLinks = await res.json();  // Parse the JSON response
+        const res_json = await res.json();  // Parse the JSON response
+        console.log('Response JSON:', res_json);
+        const trackLinks = Array.isArray(res_json.trackLinks) ? res_json.trackLinks : [];
+        const playlistName = res_json.playlistName;
         const resolvedTracks = [];
 
         for (const link of trackLinks) {
@@ -464,7 +467,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (track) resolvedTracks.push(track);
         }
 
-        return resolvedTracks;
+        return { tracks: resolvedTracks, playlistName: playlistName };
     }
 
     async function getTrackNameAndArtistFromUrl(trackUrl) {
