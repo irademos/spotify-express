@@ -3,6 +3,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const searchInput = document.getElementById('playlistSearchInput');
     const searchResultsList = document.getElementById('searchResultsList');
     const selectedPlaylistsList = document.getElementById('selectedPlaylistsList');
+    const createPlaylistLog = document.getElementById('createPlaylistLog');
     
     let selectedPlaylists = [];
     let selectedURLs = [];
@@ -212,6 +213,13 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log('button pressed!')
     }
 
+    function createPlistLog(text) {
+        createPlaylistLog.innerHTML = ''; // Clear the list
+        const listItem = document.createElement('li');
+        listItem.textContent = text;
+        createPlaylistLog.appendChild(listItem);
+    }
+
     async function createPlaylist() {   
         const frequency = document.querySelector('input[name="frequency"]:checked')?.value;
         const newPlaylistName = document.getElementById('newPlaylistNameInput').value.trim();
@@ -224,6 +232,8 @@ document.addEventListener('DOMContentLoaded', function() {
             alert('Please select at least one playlist or provide a URL.');
             return;
         }
+
+        createPlistLog("Creating playlist. Please wait.");
     
         const timeRanges = {
             daily: 1,
@@ -243,6 +253,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const userId = userData.id;
     
             if (!userId) {
+                createPlistLog("Spotify User ID not found.");
                 console.error('User ID not found.');
                 return;
             }
@@ -262,6 +273,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const newPlaylistId = playlistData.id;
     
             if (!newPlaylistId) {
+                createPlistLog("Failed to create playlist.");
                 console.error('Failed to create playlist.');
                 return;
             }
@@ -271,6 +283,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
             // Selected Playlists
             for (const playlist of selectedPlaylists) {
+                createPlistLog(`Getting tracks from ${playlist.name}.`);
                 const playlistTracksResponse = await fetchWithSpotifyAuth(`https://api.spotify.com/v1/playlists/${playlist.id}/tracks`, {
                     headers: {}
                 });
@@ -301,6 +314,7 @@ document.addEventListener('DOMContentLoaded', function() {
             // Selected URLs
             for (const url of selectedURLs) {
                 try {
+                    createPlistLog(`Getting tracks from ${url}.`);
                     const scraped = await scrapeHTMLTracks(url); // [{ track, artist }]
                     console.log(scraped)
                     for (const { track, artist } of scraped) {
@@ -355,10 +369,12 @@ document.addEventListener('DOMContentLoaded', function() {
             const trackEntries = Array.from(uniqueTracks.values());
             for (const entry of trackEntries) {
                 try {
-                    await sleep(60); // 60 ms delay between requests
+                    await sleep(50); // 50 ms delay between requests
                     entry.monthlyListeners = await getMonthlyListeners(entry.artistId) || 0;
                     console.log(entry.monthlyListeners);
+                    createPlistLog(`Sorting by listeners: ${entry.trackName}, ${entry.monthlyListeners}`);
                 } catch (error) {
+                    createPlistLog(`Error getting listeners: ${error}`);
                     console.log('Error getting listeners:', error);
                     entry.monthlyListeners = 0;
                 }
@@ -379,6 +395,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
 
             // save to file for debug
+            createPlistLog("Playlist created, saving to txt file.");
             const lines = [];
             for (const entry of trackEntries) {
                 const { trackName, uri, artistId, playlistName } = entry;
