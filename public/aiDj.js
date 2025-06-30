@@ -1,5 +1,6 @@
 document.addEventListener('DOMContentLoaded', function() {
     const devicesList = document.getElementById('devicesList');
+    const logList = document.getElementById('logList');
 
     let selectedDevice = [];
 
@@ -43,6 +44,13 @@ document.addEventListener('DOMContentLoaded', function() {
             console.log(config)
         })
         .catch(error => console.error('Error fetching config:', error));
+    }
+
+    function printStatus(text) {
+        logList.innerHTML = ''; // Clear the list
+        const statusItem = document.createElement('li');
+        statusItem.textContent = `${text}`;
+        logList.appendChild(statusItem);
     }
 
     function updateDevices(data) {
@@ -407,7 +415,13 @@ document.addEventListener('DOMContentLoaded', function() {
         // Get user location
         console.log(`Now playing: ${trackInfo.trackName} by ${trackInfo.artistName}`);
 
-        const prompt = `Provide an interesting fact or two about the band ${trackInfo.artistName}. Don't say anything about the genre, style or influences of the music. Use the following format:
+        const description = await getArtistDescription(trackInfo.artistName);
+        let desc_display = "";
+        if (description != "") {
+            desc_display = "Here is a description for reference: " + description + " ";
+        }
+
+        const prompt = `Provide an interesting fact about the band ${trackInfo.artistName}. ${desc_display}Don't say anything about the genre, style or influences of the music. Use the following format:
 location: [City or country where the band is from]
 fact: [One or two sentences with an interesting fact about the band]`;
 
@@ -465,8 +479,66 @@ fact: [One or two sentences with an interesting fact about the band]`;
             await announceTrack(trackInfo);
         });
     }
-    
-    
+
+    function decodeHTMLEntities(text) {
+        const textarea = document.createElement("textarea");
+        textarea.innerHTML = text;
+        return textarea.value;
+    }
+
+    async function searchChartmetricArtistPage(artistName) {
+        const apiKey = 'AIzaSyArWaxNa3-CGpgWVaFatOHqjSDgSUUqwbM';
+        const cx = '64a7fe09d9d9c4618';
+        const query = `${artistName}`; // site:chartmetric.com/artist 
+
+        const res = await fetch(`https://www.googleapis.com/customsearch/v1?key=${apiKey}&cx=${cx}&q=${encodeURIComponent(query)}`);
+        const data = await res.json();
+
+        console.log(data);
+
+        const firstResult = data.items?.[0]?.link;
+        return firstResult || null;
+    }
+
+    async function getArtistDescription(artistName) {
+
+        const chartmetric_url = await searchChartmetricArtistPage(artistName);
+        if (chartmetric_url == null) {
+            console.error("Couldn't get chartmetric url");
+            return;
+        }
+        const url = '/api/ai-dj-test-button?url=' + encodeURIComponent(chartmetric_url.toString());
+
+        try {
+            const res = await fetch(url);
+            const html = await res.text();
+
+            // Match the JSON string with description (greedy match for robustness)
+            const match = html.match(/"description"\s*:\s*"([^"]*?)"\s*[,}]/);
+            if (!match) {
+                console.error('Artist description not found.');
+                return;
+            }
+
+            // Decode HTML entities and escape characters
+            const rawDescription = match[1];
+            const cleanDescription = decodeHTMLEntities(rawDescription.replace(/\\"/g, '"'));
+
+            console.log('Artist Description:', cleanDescription);
+
+            return cleanDescription;
+
+            // Use the description as needed
+        } catch (error) {
+            console.error('Error fetching or parsing description:', error);
+            return "";
+        }
+    }
+
+    async function testButton() {
+        console.log("Button pressed!")
+    }
+
     // Attach to button
     document.getElementById("roadTrip").addEventListener("click", () => {
         // playTrack(testTrackUri);
@@ -474,5 +546,6 @@ fact: [One or two sentences with an interesting fact about the band]`;
     });
     document.getElementById("setDevice").addEventListener("click", setDevice);
     document.getElementById("announceTracks").addEventListener("click", startAnnouncing);
+    document.getElementById("testButton").addEventListener("click", testButton);
 
 });

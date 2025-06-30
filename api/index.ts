@@ -111,6 +111,22 @@ app.get('/api/test-discover', async (req, res) => {
     }
 });
 
+app.get('/api/ai-dj-test-button', async (req, res) => {
+    const url = req.query.url as string;
+    if (!url) return res.status(400).send('Missing URL');
+
+    try {
+        const response = await axios.get(url);
+        // const $ = cheerio.load(response.data);
+
+        res.setHeader('Content-Type', 'text/plain');
+        res.send(response.data); // This is the raw HTML as a string
+    } catch (err) {
+        console.error('Download error:', err);
+        res.status(500).send('Failed to fetch playlist');
+    }
+});
+
 app.get('/api/scrape', function (req, res) {
   console.log("here for scrape.")
   const url = req.query.url;

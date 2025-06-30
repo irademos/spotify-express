@@ -210,7 +210,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // const res = await fetch(`/api/test-discover?id=37i9dQZF1DWWjGdmeTyeJ6`);
         // if (!res.ok) throw new Error("Failed to get playlist tracks");
         // return await res.json();
-        console.log('button pressed!')
+        console.log('button pressed!');
     }
 
     function createPlistLog(text) {
