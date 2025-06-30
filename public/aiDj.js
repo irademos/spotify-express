@@ -487,17 +487,9 @@ fact: [One or two sentences with an interesting fact about the band]`;
     }
 
     async function searchChartmetricArtistPage(artistName) {
-        const apiKey = 'AIzaSyArWaxNa3-CGpgWVaFatOHqjSDgSUUqwbM';
-        const cx = '64a7fe09d9d9c4618';
-        const query = `${artistName}`; // site:chartmetric.com/artist 
-
-        const res = await fetch(`https://www.googleapis.com/customsearch/v1?key=${apiKey}&cx=${cx}&q=${encodeURIComponent(query)}`);
+        const res = await fetch(`/api/chartmetric-search?artist=${encodeURIComponent(artistName)}`);
         const data = await res.json();
-
-        console.log(data);
-
-        const firstResult = data.items?.[0]?.link;
-        return firstResult || null;
+        return data.url;
     }
 
     async function getArtistDescription(artistName) {
@@ -525,6 +517,11 @@ fact: [One or two sentences with an interesting fact about the band]`;
             const cleanDescription = decodeHTMLEntities(rawDescription.replace(/\\"/g, '"'));
 
             console.log('Artist Description:', cleanDescription);
+            let returnDescription = cleanDescription;
+
+            if (cleanDescription == "Autofetched / Missing Data Sources") {
+                returnDescription = "";
+            }
 
             return cleanDescription;
 

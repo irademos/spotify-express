@@ -127,6 +127,30 @@ app.get('/api/ai-dj-test-button', async (req, res) => {
     }
 });
 
+app.get('/api/chartmetric-search', async (req, res) => {
+    const artistName = req.query.artist as string;
+    if (!artistName) return res.status(400).send('Missing artist');
+
+    const apiKey = process.env.GOOGLE_KEY;
+    const cx = process.env.GOOGLE_SEARCH_KEY;
+    const query = `${artistName} site:chartmetric.com/artist`;
+
+    try {
+        const response = await axios.get('https://www.googleapis.com/customsearch/v1', {
+            params: {
+                key: apiKey,
+                cx: cx,
+                q: query
+            }
+        });
+        const firstResult = response.data.items?.[0]?.link || null;
+        res.json({ url: firstResult });
+    } catch (err) {
+        console.error('Google Search error:', err);
+        res.status(500).send('Search failed');
+    }
+});
+
 app.get('/api/scrape', function (req, res) {
   console.log("here for scrape.")
   const url = req.query.url;
