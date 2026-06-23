@@ -79,12 +79,129 @@ interface Track {
   artist: string;
 }
 
+interface Show {
+  datetime: string;
+  artist: string;
+  venue: string;
+  venueId: string;
+}
+
+interface VenueResult {
+  venueId: string;
+  venueName: string;
+  shows: Show[];
+}
+
+const ATLANTA_VENUE_IDS = [
+    '0HUd3zYwg7drRMeKHI7hOX',
+    '56w6Uns7gENOQdP7e99k0S',
+    '3YU5ZqMJOchPbG7DEZEZcF',
+    '6CgzpPmHJFo3nTNyyj1iTH',
+    '2pjdYXAB3zHcuY8yUjAKAE',
+    '4eM6foMcJdCgMYKUQBi1E3',
+    '7EGBn6qZP7ngRny9nQsHB9',
+    '6VgXO4NJiX6ygWDjhDWsL9',
+    '4EriXwnDOckm52Gt46jUx2',
+    '4QJGQpVyqnLgHtolgCp7gL',
+    '1yeWzqcdpKUnHmZMUOa9Ma',
+    '3LEHQ0zFPAkNcm21GC4rE1',
+    '07xImrFVCTJg8SzUu3cxXw',
+    '3z4ioL0RWXvTqRW45P94dz',
+    '15ZsLTvybmVMZcQ6ynJ1Wd',
+    '0IYFqOtJaNVJpj2sgaRwKo',
+    '6CViqzavVGQk0O9Lukx5Pd',
+    '01BO8Btvq2dWdQqvIKjTgU',
+    '0uzzDQsAY48qKMeseh3w5N',
+    '4vD9OzCEMMTnxJkAbXuJMM',
+    '0RO73kiZJcbnntnICnPhnP',
+    '4uuxBkCxJkvMLxjnC7x8lW',
+    '5lJumEpnjrp9sZcIukIsBN',
+];
+
+let atlantaCache: { data: any; fetchedAt: number } | null = null;
+const ATLANTA_CACHE_TTL = 60 * 60 * 1000; // 1 hour
+
+async function scrapeVenueShows(venueId: string): Promise<VenueResult> {
+    const url = `https://open.spotify.com/venue/${venueId}`;
+    try {
+        const response = await axios.get(url, {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1',
+                'Sec-Fetch-Dest': 'document',
+                'Sec-Fetch-Mode': 'navigate',
+                'Sec-Fetch-Site': 'none',
+                'Sec-Fetch-User': '?1',
+            },
+            timeout: 20000,
+        });
+
+        const $ = cheerio.load(response.data);
+
+        const venueName = $('[data-testid="entityTitle"] h1').first().text().trim() || venueId;
+
+        const shows: Show[] = [];
+        $('a[data-testid="concert-card"]').each((_, card) => {
+            const $card = $(card);
+            const datetime = $card.find('time[datetime]').attr('datetime') || '';
+            const artist = $card.find('h3').text().trim();
+            if (datetime && artist) {
+                shows.push({ datetime, artist, venue: venueName, venueId });
+            }
+        });
+
+        return { venueId, venueName, shows };
+    } catch (err: any) {
+        console.error(`Failed to scrape venue ${venueId}: ${err.message}`);
+        return { venueId, venueName: venueId, shows: [] };
+    }
+}
+
 app.get('/auto-playlist', function (req, res) {
   res.sendFile(path.join(__dirname, '..', 'components', 'autoPlaylist.htm'));
 });
 
 app.get('/ai-dj', function (req, res) {
   res.sendFile(path.join(__dirname, '..', 'components', 'aiDj.htm'));
+});
+
+app.get('/atlanta-shows', function (req, res) {
+  res.sendFile(path.join(__dirname, '..', 'components', 'atlantaShows.htm'));
+});
+
+app.get('/api/atlanta-shows', async (req, res) => {
+    if (atlantaCache && Date.now() - atlantaCache.fetchedAt < ATLANTA_CACHE_TTL) {
+        return res.json(atlantaCache.data);
+    }
+
+    try {
+        const results: VenueResult[] = [];
+        // Scrape 5 venues at a time to avoid overwhelming Spotify
+        for (let i = 0; i < ATLANTA_VENUE_IDS.length; i += 5) {
+            const batch = ATLANTA_VENUE_IDS.slice(i, i + 5);
+            const batchResults = await Promise.all(batch.map(id => scrapeVenueShows(id)));
+            results.push(...batchResults);
+        }
+
+        const allShows = results.flatMap(r => r.shows);
+        allShows.sort((a, b) => new Date(a.datetime).getTime() - new Date(b.datetime).getTime());
+
+        const venues = results
+            .filter(r => r.venueName !== r.venueId)
+            .map(r => ({ id: r.venueId, name: r.venueName }));
+
+        const data = { shows: allShows, venues, scrapedAt: new Date().toISOString() };
+        atlantaCache = { data, fetchedAt: Date.now() };
+
+        res.json(data);
+    } catch (err: any) {
+        console.error('Atlanta shows error:', err.message);
+        res.status(500).json({ error: 'Failed to fetch shows', shows: [], venues: [] });
+    }
 });
 
 app.get('/api/scape-html-only', async (req, res) => {
