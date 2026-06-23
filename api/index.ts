@@ -9,6 +9,7 @@ const bodyParser = require('body-parser');
 const path = require('path');
 const cookieParser = require('cookie-parser');
 const refreshRoute = require('./refresh');
+const crypto = require('crypto');
 
 app.use(cookieParser());
 app.use(bodyParser.json());
@@ -139,7 +140,7 @@ async function getSpotifyWebToken(): Promise<{ clientToken: string; accessToken:
                 js_sdk_data: {
                     device_brand: 'unknown', device_model: 'unknown',
                     os: 'windows', os_version: 'NT 10.0',
-                    device_id: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+                    device_id: crypto.randomUUID(),
                     device_type: 'computer',
                 }
             }
@@ -160,15 +161,24 @@ async function getSpotifyWebToken(): Promise<{ clientToken: string; accessToken:
             return null;
         }
 
-        const tokenRes = await axios.get('https://open.spotify.com/get_access_token', {
-            params: { reason: 'transport', productType: 'web_player' },
-            headers: {
-                'Client-Token': clientToken,
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
-                'Accept': 'application/json',
-            },
-            timeout: 10000,
-        });
+        const tokenRes = await axios.get(
+            'https://open.spotify.com/get_access_token',
+            {
+                params: {
+                    reason: 'transport',
+                    productType: 'web_player'
+                },
+                headers: {
+                    'Client-Token': clientToken,
+                    'Origin': 'https://open.spotify.com',
+                    'Referer': 'https://open.spotify.com/',
+                    'User-Agent':
+                        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/149.0.0.0 Safari/537.36',
+                    'Accept': 'application/json'
+                },
+                timeout: 10000
+            }
+        );
 
         const accessToken = tokenRes.data.accessToken;
         const expiresAt  = tokenRes.data.accessTokenExpirationTimestampMs || (Date.now() + 3600000);
@@ -390,10 +400,12 @@ async function fetchVenueHtml(venueId: string): Promise<VenueResult | null> {
     return null;
 }
 
-async function getVenueData(venueId: string, userAccessToken?: string) {
-    const tokens = await getSpotifyWebToken();
-
-    const partnerResult = await tryPartnerApiV2(venueId, tokens || undefined);
+async function getVenueData(
+    venueId: string,
+    userAccessToken?: string,
+    tokens?: { clientToken:string; accessToken:string } | null
+) {
+    const partnerResult = await tryPartnerApiV2(venueId, tokens ?? undefined);
     if (partnerResult) return partnerResult;
 
     const htmlResult = await fetchVenueHtml(venueId);
@@ -424,9 +436,10 @@ app.get('/api/atlanta-shows', async (req, res) => {
 
     try {
         const results: VenueResult[] = [];
+        const tokens = (await getSpotifyWebToken()) ?? undefined;
         for (let i = 0; i < ATLANTA_VENUE_IDS.length; i += 5) {
             const batch = ATLANTA_VENUE_IDS.slice(i, i + 5);
-            const batchResults = await Promise.all(batch.map(id => getVenueData(id, userAccessToken)));
+            const batchResults = await Promise.all(batch.map(id => getVenueData(id, userAccessToken, tokens)));
             results.push(...batchResults);
         }
 
