@@ -281,27 +281,10 @@ async function fetchVenueHtml(venueId: string): Promise<VenueResult | null> {
 
             const html = resp.data;
 
+            const idx = html.find("api-partner.spotify.com")
+            console.log(html.slice(idx-500, idx+1500));
+
             const scripts = $('script');
-
-            for (const text of scripts) {
-                try {
-                    const decoded = Buffer.from(text, "base64").toString("utf8");
-
-                    console.log(decoded.slice(0, 500));
-                } catch {}
-            }
-
-            [
-            "api-partner.spotify.com",
-            "graphql",
-            "apollo",
-            "__NEXT_DATA__",
-            "query",
-            "operationName"
-            ].forEach(x => {
-            console.log(x, html.includes(x));
-            });
-        
         }
 
         const venueName =
