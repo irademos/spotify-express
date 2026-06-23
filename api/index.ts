@@ -150,9 +150,12 @@ async function getSpotifyWebToken(): Promise<{ clientToken: string; accessToken:
                 'Accept': 'application/json',
                 'Origin': 'https://open.spotify.com',
                 'Referer': 'https://open.spotify.com/',
-                'User-Agent': 'Mozilla/5.0',
-                'sec-fetch-site': 'same-site',
-                'sec-fetch-mode': 'cors',
+                'User-Agent':
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/137.0 Safari/537.36',
+                'sec-ch-ua':
+                '"Chromium";v="137", "Not/A)Brand";v="99"',
+                'sec-ch-ua-mobile': '?0',
+                'sec-ch-ua-platform': '"Windows"',
             },
             timeout: 10000,
         });
@@ -307,22 +310,12 @@ async function tryPartnerApiV2(venueId: string, tokens?: { accessToken: string; 
     };
 
     // Try with auth first; if rejected, retry without auth headers
-    // const headerSets: Record<string, string>[] = tokens
-    //     ? [
-    //         { ...baseHeaders, Authorization: `Bearer ${tokens.accessToken}`, 'Client-Token': tokens.clientToken },
-    //         { ...baseHeaders },
-    //       ]
-    //     : [baseHeaders];
-
-    const headerSets = tokens
+    const headerSets: Record<string, string>[] = tokens
         ? [
-            {
-            ...baseHeaders,
-            Authorization: `Bearer ${tokens.accessToken}`,
-            'Client-Token': tokens.clientToken,
-            }
-        ]
-        : [];
+            { ...baseHeaders, Authorization: `Bearer ${tokens.accessToken}`, 'Client-Token': tokens.clientToken },
+            { ...baseHeaders },
+          ]
+        : [baseHeaders];
 
     for (const headers of headerSets) {
         try {
