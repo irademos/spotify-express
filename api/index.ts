@@ -121,44 +121,206 @@ const ATLANTA_VENUE_IDS = [
 let atlantaCache: { data: any; fetchedAt: number } | null = null;
 const ATLANTA_CACHE_TTL = 60 * 60 * 1000; // 1 hour
 
-async function scrapeVenueShows(venueId: string): Promise<VenueResult> {
-    const url = `https://open.spotify.com/venue/${venueId}`;
+// Spotify web-player client ID (public, used by open.spotify.com)
+const SP_WP_CLIENT_ID = 'd8a5ed958d274c2e8ee717e6a4b0971d';
+const SP_WP_VERSION   = '1.2.93.517.g4b5ae130';
+
+let webTokenCache: { clientToken: string; accessToken: string; expiresAt: number } | null = null;
+
+async function getSpotifyWebToken(): Promise<{ clientToken: string; accessToken: string } | null> {
+    if (webTokenCache && Date.now() < webTokenCache.expiresAt - 60000) {
+        return webTokenCache;
+    }
     try {
-        const response = await axios.get(url, {
+        const clientRes = await axios.post('https://clienttoken.spotify.com/v1/clienttoken', {
+            client_data: {
+                client_version: SP_WP_VERSION,
+                client_id: SP_WP_CLIENT_ID,
+                js_sdk_data: {
+                    device_brand: 'unknown', device_model: 'unknown',
+                    os: 'windows', os_version: 'NT 10.0',
+                    device_id: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+                    device_type: 'computer',
+                }
+            }
+        }, { headers: { 'Content-Type': 'application/json' }, timeout: 10000 });
+
+        const clientToken = clientRes.data.granted_token?.token;
+        if (!clientToken) {
+            console.log('[atlanta] clienttoken response:', JSON.stringify(clientRes.data).slice(0, 200));
+            return null;
+        }
+
+        const tokenRes = await axios.get('https://open.spotify.com/get_access_token', {
+            params: { reason: 'transport', productType: 'web_player' },
             headers: {
+                'Client-Token': clientToken,
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+                'Accept': 'application/json',
+            },
+            timeout: 10000,
+        });
+
+        const accessToken = tokenRes.data.accessToken;
+        const expiresAt  = tokenRes.data.accessTokenExpirationTimestampMs || (Date.now() + 3600000);
+        if (!accessToken) {
+            console.log('[atlanta] get_access_token response:', JSON.stringify(tokenRes.data).slice(0, 200));
+            return null;
+        }
+
+        console.log(`[atlanta] web token obtained, isAnonymous=${tokenRes.data.isAnonymous}`);
+        webTokenCache = { clientToken, accessToken, expiresAt };
+        return webTokenCache;
+    } catch (err: any) {
+        console.error('[atlanta] getSpotifyWebToken error:', err.response?.status, err.message);
+        return null;
+    }
+}
+
+// Try Spotify's partner GraphQL API for venue concert data
+async function tryPartnerApi(venueId: string, accessToken: string, clientToken: string): Promise<VenueResult | null> {
+    const venueUri = `spotify:venue:${venueId}`;
+    try {
+        const variables = JSON.stringify({ uri: venueUri });
+        const extensions = JSON.stringify({
+            persistedQuery: { version: 1, sha256Hash: '9e6ba7d6dd9b65a4fdd0493e1e5e63cbdf6f78c2e0e30e4a9fc97498f95ab9e0' }
+        });
+        const resp = await axios.get('https://api-partner.spotify.com/pathfinder/v1/query', {
+            params: { operationName: 'queryVenuePage', variables, extensions },
+            headers: {
+                Authorization: `Bearer ${accessToken}`,
+                'Client-Token': clientToken,
+                'Accept': 'application/json',
+                'app-platform': 'WebPlayer',
+                'spotify-app-version': SP_WP_VERSION,
+            },
+            timeout: 12000,
+        });
+
+        const d = resp.data?.data;
+        console.log(`[atlanta] partnerApi ${venueId}: keys=${Object.keys(d || {}).join(',')}`);
+
+        const venueData = d?.venueByUri || d?.venue || null;
+        if (!venueData) return null;
+
+        const venueName = venueData.name || venueId;
+        const concerts = venueData.upcomingConcerts?.items || venueData.concerts?.items || [];
+        const shows: Show[] = [];
+        concerts.forEach((c: any) => {
+            const datetime = c.startDateTime || c.startDate || c.date;
+            const artist = c.title || c.name || c.artists?.items?.[0]?.profile?.name || c.artist?.name;
+            if (datetime && artist) shows.push({ datetime, artist, venue: venueName, venueId });
+        });
+
+        return { venueId, venueName, shows };
+    } catch (err: any) {
+        console.log(`[atlanta] partnerApi ${venueId}: ${err.response?.status || err.message}`);
+        return null;
+    }
+}
+
+// Try Spotify's spclient API with whatever access token we have
+async function trySpClient(venueId: string, accessToken: string, clientToken?: string): Promise<VenueResult | null> {
+    const venueUri = encodeURIComponent(`spotify:venue:${venueId}`);
+    const endpoints = [
+        `concert-view/v2/page?uri=${venueUri}&market=US&locale=en`,
+        `concert-discovery-view/v2/view?uri=${venueUri}`,
+    ];
+    const headers: any = {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: 'application/json',
+        'app-platform': 'WebPlayer',
+        'spotify-app-version': SP_WP_VERSION,
+    };
+    if (clientToken) headers['Client-Token'] = clientToken;
+
+    for (const ep of endpoints) {
+        try {
+            const resp = await axios.get(`https://spclient.wg.spotify.com/${ep}`, { headers, timeout: 10000 });
+            const d = resp.data;
+            console.log(`[atlanta] spclient ${ep.split('?')[0]} ${venueId}: status=${resp.status} keys=${Object.keys(d || {}).join(',')}`);
+
+            const venueName = d?.name || d?.venue?.name || venueId;
+            const items: any[] = d?.concerts?.items || d?.events?.items || [];
+            const shows: Show[] = [];
+            items.forEach((item: any) => {
+                const datetime = item.startDateTime || item.startDate || item.date;
+                const artist = item.title || item.name || item.artists?.[0]?.name;
+                if (datetime && artist) shows.push({ datetime, artist, venue: venueName, venueId });
+            });
+
+            if (shows.length > 0 || venueName !== venueId) return { venueId, venueName, shows };
+        } catch (err: any) {
+            console.log(`[atlanta] spclient ${ep.split('?')[0]} ${venueId}: ${err.response?.status || err.message}`);
+        }
+    }
+    return null;
+}
+
+// Fetch the venue page HTML using a Spotify access token for auth
+async function fetchVenueHtml(venueId: string, accessToken: string, clientToken: string): Promise<VenueResult | null> {
+    try {
+        const resp = await axios.get(`https://open.spotify.com/venue/${venueId}`, {
+            headers: {
+                Authorization: `Bearer ${accessToken}`,
+                'Client-Token': clientToken,
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
                 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
                 'Accept-Language': 'en-US,en;q=0.9',
-                'Accept-Encoding': 'gzip, deflate, br',
-                'Connection': 'keep-alive',
-                'Upgrade-Insecure-Requests': '1',
+                'Referer': 'https://open.spotify.com/',
                 'Sec-Fetch-Dest': 'document',
                 'Sec-Fetch-Mode': 'navigate',
-                'Sec-Fetch-Site': 'none',
-                'Sec-Fetch-User': '?1',
+                'Sec-Fetch-Site': 'same-origin',
             },
             timeout: 20000,
         });
 
-        const $ = cheerio.load(response.data);
+        const $ = cheerio.load(resp.data);
 
-        const venueName = $('[data-testid="entityTitle"] h1').first().text().trim() || venueId;
+        const venueName =
+            $('[data-testid="entityTitle"] h1').first().text().trim() ||
+            ($('meta[property="og:title"]').attr('content') || '').replace(/\s*\|\s*Spotify\s*$/i, '').trim() ||
+            $('title').text().replace(/\s*\|\s*Spotify\s*$/i, '').replace(/^Spotify\s*$/i, '').trim() ||
+            venueId;
 
         const shows: Show[] = [];
         $('a[data-testid="concert-card"]').each((_, card) => {
             const $card = $(card);
             const datetime = $card.find('time[datetime]').attr('datetime') || '';
             const artist = $card.find('h3').text().trim();
-            if (datetime && artist) {
-                shows.push({ datetime, artist, venue: venueName, venueId });
-            }
+            if (datetime && artist) shows.push({ datetime, artist, venue: venueName, venueId });
         });
 
-        return { venueId, venueName, shows };
+        console.log(`[atlanta] html ${venueId}: name="${venueName}" shows=${shows.length}`);
+        if (shows.length > 0 || venueName !== venueId) return { venueId, venueName, shows };
     } catch (err: any) {
-        console.error(`Failed to scrape venue ${venueId}: ${err.message}`);
-        return { venueId, venueName: venueId, shows: [] };
+        console.log(`[atlanta] html ${venueId}: ${err.response?.status || err.message}`);
     }
+    return null;
+}
+
+async function getVenueData(venueId: string, userAccessToken?: string): Promise<VenueResult> {
+    const webTokens = await getSpotifyWebToken();
+
+    // 1. Partner GraphQL API (most likely to have structured concert data)
+    if (webTokens) {
+        const result = await tryPartnerApi(venueId, webTokens.accessToken, webTokens.clientToken);
+        if (result && (result.shows.length > 0 || result.venueName !== venueId)) return result;
+    }
+
+    // 2. HTML with web-player auth (works if Spotify SSRs the page when authenticated)
+    if (webTokens) {
+        const result = await fetchVenueHtml(venueId, webTokens.accessToken, webTokens.clientToken);
+        if (result) return result;
+    }
+
+    // 3. spclient with user's OAuth token
+    if (userAccessToken) {
+        const result = await trySpClient(venueId, userAccessToken, webTokens?.clientToken);
+        if (result) return result;
+    }
+
+    return { venueId, venueName: venueId, shows: [] };
 }
 
 app.get('/auto-playlist', function (req, res) {
@@ -174,32 +336,36 @@ app.get('/atlanta-shows', function (req, res) {
 });
 
 app.get('/api/atlanta-shows', async (req, res) => {
-    if (atlantaCache && Date.now() - atlantaCache.fetchedAt < ATLANTA_CACHE_TTL) {
+    const forceRefresh = req.query.refresh === '1';
+    if (!forceRefresh && atlantaCache && Date.now() - atlantaCache.fetchedAt < ATLANTA_CACHE_TTL) {
         return res.json(atlantaCache.data);
     }
 
+    const userAccessToken = req.cookies.spotifyAccessToken as string | undefined;
+
     try {
         const results: VenueResult[] = [];
-        // Scrape 5 venues at a time to avoid overwhelming Spotify
         for (let i = 0; i < ATLANTA_VENUE_IDS.length; i += 5) {
             const batch = ATLANTA_VENUE_IDS.slice(i, i + 5);
-            const batchResults = await Promise.all(batch.map(id => scrapeVenueShows(id)));
+            const batchResults = await Promise.all(batch.map(id => getVenueData(id, userAccessToken)));
             results.push(...batchResults);
         }
 
         const allShows = results.flatMap(r => r.shows);
         allShows.sort((a, b) => new Date(a.datetime).getTime() - new Date(b.datetime).getTime());
 
-        const venues = results
-            .filter(r => r.venueName !== r.venueId)
-            .map(r => ({ id: r.venueId, name: r.venueName }));
+        // Always return all venue IDs; use ID as fallback name so the filter works
+        const venues = results.map(r => ({
+            id: r.venueId,
+            name: r.venueName !== r.venueId ? r.venueName : null,
+        }));
 
         const data = { shows: allShows, venues, scrapedAt: new Date().toISOString() };
         atlantaCache = { data, fetchedAt: Date.now() };
 
         res.json(data);
     } catch (err: any) {
-        console.error('Atlanta shows error:', err.message);
+        console.error('[atlanta] endpoint error:', err.message);
         res.status(500).json({ error: 'Failed to fetch shows', shows: [], venues: [] });
     }
 });

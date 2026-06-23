@@ -213,6 +213,16 @@
             margin-top: 8px;
         }
 
+        .retry-link {
+            display: inline-block;
+            margin-top: 12px;
+            color: #1db954;
+            text-decoration: underline;
+            font-size: 14px;
+            cursor: pointer;
+        }
+        .retry-link:hover { color: #158f3f; }
+
         @media (max-width: 560px) {
             .show-item { grid-template-columns: 80px 1fr; }
             .show-venue-name { text-align: left; grid-column: 2; margin-top: -8px; }
@@ -244,12 +254,7 @@
         </div>
 
         <div id="showsMeta" class="shows-meta"></div>
-        <div id="showsContainer">
-            <div class="state-msg">
-                <span class="loading-dots">Loading Atlanta shows</span>
-                <div class="scrape-note">Fetching from 23 venues &mdash; this may take a moment</div>
-            </div>
-        </div>
+        <div id="showsContainer"></div>
     </div>
 
     <script src="/utils.js"></script>

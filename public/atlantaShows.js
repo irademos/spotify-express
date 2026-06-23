@@ -46,7 +46,9 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function updateDropdownLabel() {
         const label = document.getElementById('dropdownLabel');
-        if (selectedVenueIds.size === 0) {
+        if (venues.length === 0) {
+            label.textContent = 'No Venues Loaded';
+        } else if (selectedVenueIds.size === 0) {
             label.textContent = 'No Venues Selected';
         } else if (selectedVenueIds.size === venues.length) {
             label.textContent = 'All Venues';
@@ -58,6 +60,12 @@ document.addEventListener('DOMContentLoaded', function () {
     function buildVenueCheckboxes() {
         const container = document.getElementById('venueCheckboxes');
         container.innerHTML = '';
+
+        if (venues.length === 0) {
+            container.innerHTML = '<div style="padding:10px 14px;font-size:13px;color:#888;">No venues found</div>';
+            return;
+        }
+
         venues.forEach(v => {
             const item = document.createElement('div');
             item.className = 'venue-item';
@@ -81,7 +89,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
             const lbl = document.createElement('label');
             lbl.htmlFor = cbId;
-            lbl.textContent = v.name;
+            lbl.textContent = v.displayName;
 
             item.appendChild(cb);
             item.appendChild(lbl);
@@ -93,18 +101,14 @@ document.addEventListener('DOMContentLoaded', function () {
     const DAYS   = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
     function parseDate(datetime) {
-        // datetime like "2026-06-25T19:00-04:00"
-        // Split at T to avoid timezone pitfalls when just displaying the calendar date
         const datePart = datetime.split('T')[0];
         const [year, month, day] = datePart.split('-').map(Number);
-        // Use UTC constructor so no local timezone shift on the date
         const d = new Date(Date.UTC(year, month - 1, day));
         return {
-            sortKey: datetime,
-            monthStr: MONTHS[d.getUTCMonth()],
-            dayNum: d.getUTCDate(),
+            monthStr:  MONTHS[d.getUTCMonth()],
+            dayNum:    d.getUTCDate(),
             dayOfWeek: DAYS[d.getUTCDay()],
-            year: d.getUTCFullYear()
+            year:      d.getUTCFullYear()
         };
     }
 
@@ -122,7 +126,15 @@ document.addEventListener('DOMContentLoaded', function () {
 
         if (visible.length === 0) {
             meta.textContent = '';
-            container.innerHTML = '<div class="state-msg">No shows match the selected venues.</div>';
+            if (allShows.length === 0) {
+                container.innerHTML = `
+                    <div class="state-msg">
+                        No shows loaded yet — Spotify's API is still being explored.<br>
+                        <a href="/atlanta-shows?refresh=1" class="retry-link">Retry</a>
+                    </div>`;
+            } else {
+                container.innerHTML = '<div class="state-msg">No shows match the selected venues.</div>';
+            }
             return;
         }
 
@@ -150,28 +162,51 @@ document.addEventListener('DOMContentLoaded', function () {
         container.appendChild(ul);
     }
 
-    fetch('/api/atlanta-shows')
-        .then(res => {
-            if (!res.ok) throw new Error(`Server returned ${res.status}`);
-            return res.json();
-        })
-        .then(data => {
-            allShows = data.shows || [];
-            venues = (data.venues || []).sort((a, b) => a.name.localeCompare(b.name));
-            selectedVenueIds = new Set(venues.map(v => v.id));
+    function loadShows(url) {
+        document.getElementById('showsContainer').innerHTML = `
+            <div class="state-msg">
+                <span class="loading-dots">Loading Atlanta shows</span>
+                <div class="scrape-note">Fetching from 23 venues &mdash; this may take a moment</div>
+            </div>`;
+        document.getElementById('showsMeta').textContent = '';
 
-            if (allShows.length === 0) {
+        fetch(url)
+            .then(res => {
+                if (!res.ok) throw new Error(`Server returned ${res.status}`);
+                return res.json();
+            })
+            .then(data => {
+                allShows = data.shows || [];
+
+                // Build venues list; filter out entries with no name (name===null means unknown)
+                const rawVenues = data.venues || [];
+                venues = rawVenues
+                    .filter(v => v.name !== null && v.name !== undefined)
+                    .map(v => ({ id: v.id, name: v.name, displayName: v.name }))
+                    .sort((a, b) => a.displayName.localeCompare(b.displayName));
+
+                // If no named venues came back, use all venue IDs with placeholder labels
+                if (venues.length === 0 && rawVenues.length > 0) {
+                    venues = rawVenues.map((v, i) => ({
+                        id: v.id,
+                        name: v.id,
+                        displayName: `Venue ${i + 1}`
+                    }));
+                }
+
+                selectedVenueIds = new Set(venues.map(v => v.id));
+                buildVenueCheckboxes();
+                updateDropdownLabel();
+                renderShows();
+            })
+            .catch(err => {
                 document.getElementById('showsContainer').innerHTML =
-                    '<div class="state-msg">No upcoming shows found. Spotify may have blocked the request &mdash; try again later.</div>';
-                return;
-            }
+                    `<div class="state-msg error">Failed to load shows.<br><small>${escHtml(err.message)}</small><br>
+                     <a href="/atlanta-shows?refresh=1" class="retry-link">Retry</a></div>`;
+            });
+    }
 
-            buildVenueCheckboxes();
-            updateDropdownLabel();
-            renderShows();
-        })
-        .catch(err => {
-            document.getElementById('showsContainer').innerHTML =
-                `<div class="state-msg error">Failed to load shows.<br><small>${escHtml(err.message)}</small></div>`;
-        });
+    // Support ?refresh=1 in URL to bypass server cache
+    const refresh = new URLSearchParams(window.location.search).get('refresh') === '1';
+    loadShows(refresh ? '/api/atlanta-shows?refresh=1' : '/api/atlanta-shows');
 });
