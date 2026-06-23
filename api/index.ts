@@ -123,7 +123,7 @@ const ATLANTA_CACHE_TTL = 60 * 60 * 1000; // 1 hour
 
 // Spotify web-player client ID (public, used by open.spotify.com)
 const SP_WP_CLIENT_ID = 'd8a5ed958d274c2e8ee717e6a4b0971d';
-const SP_WP_VERSION   = '1.2.93.529.g852d1e59';
+const SP_WP_VERSION   = '1.2.93.531.g966e7504';
 
 let webTokenCache: { clientToken: string; accessToken: string; expiresAt: number } | null = null;
 
@@ -143,7 +143,16 @@ async function getSpotifyWebToken(): Promise<{ clientToken: string; accessToken:
                     device_type: 'computer',
                 }
             }
-        }, { headers: { 'Content-Type': 'application/json' }, timeout: 10000 });
+        }, {
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'Origin': 'https://open.spotify.com',
+                'Referer': 'https://open.spotify.com/',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36',
+            },
+            timeout: 10000,
+        });
 
         const clientToken = clientRes.data.granted_token?.token;
         if (!clientToken) {
