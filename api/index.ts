@@ -258,24 +258,30 @@ async function trySpClient(venueId: string, accessToken: string, clientToken?: s
 }
 
 // Fetch the venue page HTML using a Spotify access token for auth
-async function fetchVenueHtml(venueId: string, accessToken: string, clientToken: string): Promise<VenueResult | null> {
+async function fetchVenueHtml(venueId: string): Promise<VenueResult | null> {
     try {
-        const resp = await axios.get(`https://open.spotify.com/venue/${venueId}`, {
-            headers: {
-                Authorization: `Bearer ${accessToken}`,
-                'Client-Token': clientToken,
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-                'Accept-Language': 'en-US,en;q=0.9',
-                'Referer': 'https://open.spotify.com/',
-                'Sec-Fetch-Dest': 'document',
-                'Sec-Fetch-Mode': 'navigate',
-                'Sec-Fetch-Site': 'same-origin',
-            },
-            timeout: 20000,
-        });
+        const resp = await axios.get(
+            `https://open.spotify.com/venue/${venueId}`,
+            {
+                headers: {
+                    'User-Agent':
+                        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                },
+                timeout: 20000
+            }
+        );
+
+        console.log(
+            `[atlanta] html ${venueId} status=${resp.status}`
+        );
 
         const $ = cheerio.load(resp.data);
+
+        console.log(
+            `[atlanta] html ${venueId} cards=${
+                $('a[data-testid="concert-card"]').length
+            }`
+        );
 
         const venueName =
             $('[data-testid="entityTitle"] h1').first().text().trim() ||
@@ -299,28 +305,18 @@ async function fetchVenueHtml(venueId: string, accessToken: string, clientToken:
     return null;
 }
 
-async function getVenueData(venueId: string, userAccessToken?: string): Promise<VenueResult> {
-    const webTokens = await getSpotifyWebToken();
+async function getVenueData(venueId: string, userAccessToken?: string) {
+    const result = await fetchVenueHtml(venueId);
 
-    // 1. Partner GraphQL API (most likely to have structured concert data)
-    if (webTokens) {
-        const result = await tryPartnerApi(venueId, webTokens.accessToken, webTokens.clientToken);
-        if (result && (result.shows.length > 0 || result.venueName !== venueId)) return result;
+    if (result) {
+        return result;
     }
 
-    // 2. HTML with web-player auth (works if Spotify SSRs the page when authenticated)
-    if (webTokens) {
-        const result = await fetchVenueHtml(venueId, webTokens.accessToken, webTokens.clientToken);
-        if (result) return result;
-    }
-
-    // 3. spclient with user's OAuth token
-    if (userAccessToken) {
-        const result = await trySpClient(venueId, userAccessToken, webTokens?.clientToken);
-        if (result) return result;
-    }
-
-    return { venueId, venueName: venueId, shows: [] };
+    return {
+        venueId,
+        venueName: venueId,
+        shows: []
+    };
 }
 
 app.get('/auto-playlist', function (req, res) {
