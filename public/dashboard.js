@@ -20,7 +20,12 @@ document.addEventListener('DOMContentLoaded', function() {
         window.location.href = '/ai-dj';
     }
 
+    function goToAtlantaShows() {
+        window.location.href = '/atlanta-shows';
+    }
+
     document.getElementById("autoPlaylist").addEventListener("click", goToAutoPlaylist);
     document.getElementById("aiDj").addEventListener("click", goToAiDj);
+    document.getElementById("atlantaShows").addEventListener("click", goToAtlantaShows);
 });
 
