@@ -34,8 +34,44 @@ app.get('/', function (req, res) {
     res.sendFile(path.join(__dirname, '..', 'components', 'home.htm'));
 });
 
-app.get('/callback', function (req, res) {
-    res.sendFile(path.join(__dirname, '..', 'components', 'callback.htm'));
+app.get('/callback', async function (req, res) {
+    const code = req.query.code as string;
+    const error = req.query.error as string;
+
+    if (error) {
+        return res.redirect('/?error=' + encodeURIComponent(error));
+    }
+    if (!code) {
+        return res.sendFile(path.join(__dirname, '..', 'components', 'callback.htm'));
+    }
+
+    const clientId = process.env.SPOTIFY_CLIENT_ID;
+    const clientSecret = process.env.SPOTIFY_CLIENT_SECRET;
+    const redirectUri = process.env.SPOTIFY_REDIRECT_URI;
+
+    const params = new URLSearchParams();
+    params.append('grant_type', 'authorization_code');
+    params.append('code', code);
+    params.append('redirect_uri', redirectUri!);
+
+    try {
+        const tokenRes = await axios.post('https://accounts.spotify.com/api/token', params, {
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'Authorization': 'Basic ' + Buffer.from(`${clientId}:${clientSecret}`).toString('base64')
+            }
+        });
+
+        const { access_token, refresh_token, expires_in } = tokenRes.data;
+        res.cookie('spotifyAccessToken', access_token, { maxAge: expires_in * 1000, path: '/' });
+        if (refresh_token) {
+            res.cookie('spotifyRefreshToken', refresh_token, { maxAge: 30 * 24 * 60 * 60 * 1000, path: '/' });
+        }
+        res.redirect('/dashboard');
+    } catch (err: any) {
+        console.error('Token exchange failed:', err.response?.data || err.message);
+        res.redirect('/?error=token_exchange_failed');
+    }
 });
 
 interface Track {
