@@ -281,6 +281,27 @@ async function fetchVenueHtml(venueId: string): Promise<VenueResult | null> {
             console.log(resp.data.substring(0, 3000));
         }
 
+        console.log(
+            resp.data.includes('__NEXT_DATA__'),
+            resp.data.includes('Spotify.Entity'),
+            resp.data.includes('apollo'),
+            resp.data.includes('concert')
+        );
+
+        const matches = resp.data.match(/<script[^>]*>(.*?)<\/script>/gs);
+        console.log('scripts', matches?.length);
+
+        const idx = resp.data.indexOf('upcoming shows');
+        console.log(idx);
+
+        if (idx > -1) {
+        console.log(
+            resp.data.substring(
+            Math.max(0, idx - 1000),
+            idx + 3000
+            )
+        );
+        }
 
         console.log(
             `[atlanta] html ${venueId} cards=${
