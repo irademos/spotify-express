@@ -123,7 +123,7 @@ const ATLANTA_CACHE_TTL = 60 * 60 * 1000; // 1 hour
 
 // Spotify web-player client ID (public, used by open.spotify.com)
 const SP_WP_CLIENT_ID = 'd8a5ed958d274c2e8ee717e6a4b0971d';
-const SP_WP_VERSION   = '1.2.93.517.g4b5ae130';
+const SP_WP_VERSION   = '1.2.93.529.g852d1e59';
 
 let webTokenCache: { clientToken: string; accessToken: string; expiresAt: number } | null = null;
 
@@ -257,6 +257,72 @@ async function trySpClient(venueId: string, accessToken: string, clientToken?: s
     return null;
 }
 
+// Try Spotify's partner GraphQL v2 API (discovered from web player network inspection)
+async function tryPartnerApiV2(venueId: string, tokens?: { accessToken: string; clientToken: string }): Promise<VenueResult | null> {
+    const venueUri = `spotify:venue:${venueId}`;
+    const body = {
+        operationName: 'venue',
+        variables: { uri: venueUri, offset: 0, limit: 20 },
+        extensions: {
+            persistedQuery: {
+                version: 1,
+                sha256Hash: '9a9e12f916cab5b797b29604fe90d64924d25e55b5696943d4cac00c03644ab9',
+            },
+        },
+    };
+
+    const baseHeaders: Record<string, string> = {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        'app-platform': 'WebPlayer',
+        'spotify-app-version': SP_WP_VERSION,
+    };
+
+    // Try with auth first; if rejected, retry without auth headers
+    const headerSets: Record<string, string>[] = tokens
+        ? [
+            { ...baseHeaders, Authorization: `Bearer ${tokens.accessToken}`, 'Client-Token': tokens.clientToken },
+            { ...baseHeaders },
+          ]
+        : [baseHeaders];
+
+    for (const headers of headerSets) {
+        try {
+            const resp = await axios.post(
+                'https://api-partner.spotify.com/pathfinder/v2/query',
+                body,
+                { headers, timeout: 12000 },
+            );
+
+            const venueData = resp.data?.data?.venue;
+            if (!venueData) {
+                console.log(`[atlanta] partnerV2 ${venueId}: no venue field in response`);
+                return null;
+            }
+
+            const venueName = venueData.name || venueId;
+            const concerts: any[] = venueData.concerts?.items || [];
+            const shows: Show[] = [];
+
+            concerts.forEach((c: any) => {
+                const datetime = c.startDatetime || c.startDateTime || c.date;
+                const artists: any[] = c.artists || [];
+                const artist = artists[0]?.name || c.title || c.name;
+                if (datetime && artist) shows.push({ datetime, artist, venue: venueName, venueId });
+            });
+
+            console.log(`[atlanta] partnerV2 ${venueId}: name="${venueName}" shows=${shows.length}`);
+            return { venueId, venueName, shows };
+        } catch (err: any) {
+            const status = err.response?.status;
+            console.log(`[atlanta] partnerV2 ${venueId}: ${status || err.message}`);
+            // Only retry without auth on auth errors; otherwise stop
+            if (status !== 401 && status !== 403) return null;
+        }
+    }
+    return null;
+}
+
 // Fetch the venue page HTML using a Spotify access token for auth
 async function fetchVenueHtml(venueId: string): Promise<VenueResult | null> {
     try {
@@ -316,17 +382,15 @@ async function fetchVenueHtml(venueId: string): Promise<VenueResult | null> {
 }
 
 async function getVenueData(venueId: string, userAccessToken?: string) {
-    const result = await fetchVenueHtml(venueId);
+    const tokens = await getSpotifyWebToken();
 
-    if (result) {
-        return result;
-    }
+    const partnerResult = await tryPartnerApiV2(venueId, tokens || undefined);
+    if (partnerResult) return partnerResult;
 
-    return {
-        venueId,
-        venueName: venueId,
-        shows: []
-    };
+    const htmlResult = await fetchVenueHtml(venueId);
+    if (htmlResult) return htmlResult;
+
+    return { venueId, venueName: venueId, shows: [] };
 }
 
 app.get('/auto-playlist', function (req, res) {
