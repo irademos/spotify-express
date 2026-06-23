@@ -150,7 +150,9 @@ async function getSpotifyWebToken(): Promise<{ clientToken: string; accessToken:
                 'Accept': 'application/json',
                 'Origin': 'https://open.spotify.com',
                 'Referer': 'https://open.spotify.com/',
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36',
+                'User-Agent': 'Mozilla/5.0',
+                'sec-fetch-site': 'same-site',
+                'sec-fetch-mode': 'cors',
             },
             timeout: 10000,
         });
@@ -191,7 +193,12 @@ async function getSpotifyWebToken(): Promise<{ clientToken: string; accessToken:
         webTokenCache = { clientToken, accessToken, expiresAt };
         return webTokenCache;
     } catch (err: any) {
-        console.error('[atlanta] getSpotifyWebToken error:', err.response?.status, err.message);
+        console.error(
+            '[atlanta] getSpotifyWebToken error:',
+            err.response?.status,
+            JSON.stringify(err.response?.data).slice(0,500),
+            err.message
+        );
         return null;
     }
 }
@@ -290,20 +297,32 @@ async function tryPartnerApiV2(venueId: string, tokens?: { accessToken: string; 
         },
     };
 
-    const baseHeaders: Record<string, string> = {
+    const baseHeaders = {
         'Content-Type': 'application/json',
         Accept: 'application/json',
+        Origin: 'https://open.spotify.com',
+        Referer: 'https://open.spotify.com/',
         'app-platform': 'WebPlayer',
         'spotify-app-version': SP_WP_VERSION,
     };
 
     // Try with auth first; if rejected, retry without auth headers
-    const headerSets: Record<string, string>[] = tokens
+    // const headerSets: Record<string, string>[] = tokens
+    //     ? [
+    //         { ...baseHeaders, Authorization: `Bearer ${tokens.accessToken}`, 'Client-Token': tokens.clientToken },
+    //         { ...baseHeaders },
+    //       ]
+    //     : [baseHeaders];
+
+    const headerSets = tokens
         ? [
-            { ...baseHeaders, Authorization: `Bearer ${tokens.accessToken}`, 'Client-Token': tokens.clientToken },
-            { ...baseHeaders },
-          ]
-        : [baseHeaders];
+            {
+            ...baseHeaders,
+            Authorization: `Bearer ${tokens.accessToken}`,
+            'Client-Token': tokens.clientToken,
+            }
+        ]
+        : [];
 
     for (const headers of headerSets) {
         try {
