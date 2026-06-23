@@ -278,6 +278,13 @@ async function fetchVenueHtml(venueId: string): Promise<VenueResult | null> {
         const $ = cheerio.load(resp.data);
 
         console.log(
+            resp.data.includes('Subhumans'),
+            resp.data.includes('Iron Roses'),
+            resp.data.includes('concert-card'),
+            resp.data.includes('__NEXT_DATA__')
+        );
+
+        console.log(
             `[atlanta] html ${venueId} cards=${
                 $('a[data-testid="concert-card"]').length
             }`
