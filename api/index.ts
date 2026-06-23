@@ -279,35 +279,40 @@ async function fetchVenueHtml(venueId: string): Promise<VenueResult | null> {
 
         if (venueId === '0HUd3zYwg7drRMeKHI7hOX') {
             console.log(resp.data.substring(0, 3000));
+
+            $('script').each((i, el) => {
+                const txt = $(el).html() || '';
+                console.log(i, txt.substring(0, 200));
+            });
+
+            console.log($.html().includes('__NEXT_DATA__'));
+            console.log($.html().includes('apollo'));
+            console.log($.html().includes('concert'));
+            console.log($.html().includes('event'));
+
+            const html = resp.data;
+
+            console.log(html.includes('Upcoming'));
+            console.log(html.includes('shows'));
+            console.log(html.includes('event'));
+            console.log(html.includes('Concert'));
+
+            const scripts = $('script');
+
+            scripts.each((i, s) => {
+                const text = $(s).html() || '';
+
+                if (
+                    text.includes('venue') ||
+                    text.includes('event') ||
+                    text.includes('concert')
+                ) {
+                    console.log('SCRIPT', i);
+                    console.log(text.substring(0, 5000));
+                }
+            });
+        
         }
-
-        console.log(
-            resp.data.includes('__NEXT_DATA__'),
-            resp.data.includes('Spotify.Entity'),
-            resp.data.includes('apollo'),
-            resp.data.includes('concert')
-        );
-
-        const matches = resp.data.match(/<script[^>]*>(.*?)<\/script>/gs);
-        console.log('scripts', matches?.length);
-
-        const idx = resp.data.indexOf('upcoming shows');
-        console.log(idx);
-
-        if (idx > -1) {
-        console.log(
-            resp.data.substring(
-            Math.max(0, idx - 1000),
-            idx + 3000
-            )
-        );
-        }
-
-        console.log(
-            `[atlanta] html ${venueId} cards=${
-                $('a[data-testid="concert-card"]').length
-            }`
-        );
 
         const venueName =
             $('[data-testid="entityTitle"] h1').first().text().trim() ||
