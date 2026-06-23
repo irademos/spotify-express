@@ -125,6 +125,8 @@ const ATLANTA_CACHE_TTL = 60 * 60 * 1000; // 1 hour
 // Spotify web-player client ID (public, used by open.spotify.com)
 const SP_WP_CLIENT_ID = 'd8a5ed958d274c2e8ee717e6a4b0971d';
 const SP_WP_VERSION   = '1.2.93.531.g966e7504';
+const UA =
+ 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36';
 
 let webTokenCache: { clientToken: string; accessToken: string; expiresAt: number } | null = null;
 
@@ -151,7 +153,7 @@ async function getSpotifyWebToken(): Promise<{ clientToken: string; accessToken:
                 'Origin': 'https://open.spotify.com',
                 'Referer': 'https://open.spotify.com/',
                 'User-Agent':
-                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/137.0 Safari/537.36',
+                UA,
                 'sec-ch-ua':
                 '"Chromium";v="137", "Not/A)Brand";v="99"',
                 'sec-ch-ua-mobile': '?0',
@@ -165,6 +167,26 @@ async function getSpotifyWebToken(): Promise<{ clientToken: string; accessToken:
             console.log('[atlanta] clienttoken response:', JSON.stringify(clientRes.data).slice(0, 200));
             return null;
         }
+        console.log("client token ok", clientToken.slice(0,20));
+
+        const page = await axios.get(
+            "https://open.spotify.com/",
+            {
+                headers: {
+                    "User-Agent": UA,
+                    "Accept": "text/html,application/xhtml+xml"
+                },
+                timeout: 10000
+            }
+        );
+
+        const cookies = (page.headers["set-cookie"] || [])
+            .map(x => x.split(";")[0])
+            .join("; ");
+
+        console.log("spotify cookies:", cookies);
+        console.log(page.status);
+        console.log(page.headers);
 
         const tokenRes = await axios.get(
             'https://open.spotify.com/get_access_token',
@@ -177,9 +199,18 @@ async function getSpotifyWebToken(): Promise<{ clientToken: string; accessToken:
                     'Client-Token': clientToken,
                     'Origin': 'https://open.spotify.com',
                     'Referer': 'https://open.spotify.com/',
-                    'User-Agent':
-                        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/149.0.0.0 Safari/537.36',
-                    'Accept': 'application/json'
+                    'User-Agent': UA,
+                    'Accept': 'application/json',
+
+                    'sec-ch-ua':
+                        '"Chromium";v="137", "Not/A)Brand";v="99"',
+                    'sec-ch-ua-mobile': '?0',
+                    'sec-ch-ua-platform': '"Windows"',
+                    'sec-fetch-site': 'same-origin',
+                    'sec-fetch-mode': 'cors',
+                    'sec-fetch-dest': 'empty',
+
+                    ...(cookies ? { Cookie: cookies } : {})
                 },
                 timeout: 10000
             }
