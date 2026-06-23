@@ -281,10 +281,16 @@ async function fetchVenueHtml(venueId: string): Promise<VenueResult | null> {
 
             const html = resp.data;
 
-            const idx = html.find("api-partner.spotify.com")
-            console.log(html.slice(idx-500, idx+1500));
+            const match = html.match(/.{0,500}api-partner\.spotify\.com.{0,1500}/s);
+            console.log(match?.[0]);
 
-            const scripts = $('script');
+            const regex = /https?:\/\/[^"']+/g;
+            const urls = html.match(regex) || [];
+            console.log(urls.filter(u => u.includes("spotify")));
+            
+            $('script[src]').each((_, el) => {
+                console.log($(el).attr('src'));
+            });
         }
 
         const venueName =
