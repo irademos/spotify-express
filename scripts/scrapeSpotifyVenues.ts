@@ -46,12 +46,21 @@ interface Show {
   artist: string;
   venue: string;
   venueId: string;
+  spotifyArtistId?: string;
 }
 
 interface VenueResult {
   venueId: string;
   venueName: string;
   shows: Show[];
+}
+
+function normalizeArtistName(name: string): string {
+  return name
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]/g, '');
 }
 
 function parseVenueApiResponse(venueData: any, venueId: string): VenueResult {
@@ -186,6 +195,117 @@ async function fetchVenueViaPartnerApi(
   }
 }
 
+async function getClientCredentialsToken(): Promise<string | null> {
+  const clientId = process.env.SPOTIFY_CLIENT_ID;
+  const clientSecret = process.env.SPOTIFY_CLIENT_SECRET;
+
+  if (!clientId || !clientSecret) {
+    console.log('[scraper] No Spotify credentials — skipping artist ID lookup');
+    return null;
+  }
+
+  try {
+    const resp = await axios.post(
+      'https://accounts.spotify.com/api/token',
+      new URLSearchParams({ grant_type: 'client_credentials' }),
+      {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Authorization: 'Basic ' + Buffer.from(`${clientId}:${clientSecret}`).toString('base64'),
+        },
+        timeout: 8000,
+      }
+    );
+    return resp.data.access_token || null;
+  } catch (err: any) {
+    console.log('[scraper] Failed to get client credentials token:', err.message);
+    return null;
+  }
+}
+
+async function searchSpotifyArtist(artistName: string, token: string): Promise<string | null> {
+  try {
+    const resp = await axios.get('https://api.spotify.com/v1/search', {
+      params: { q: `"${artistName}"`, type: 'artist', limit: 10 },
+      headers: { Authorization: `Bearer ${token}` },
+      timeout: 8000,
+    });
+
+    const items: any[] = resp.data?.artists?.items || [];
+    if (items.length === 0) return null;
+
+    const normalTarget = normalizeArtistName(artistName);
+
+    // Exact normalized name match wins
+    const exactMatch = items.find((a: any) => normalizeArtistName(a.name) === normalTarget);
+    if (exactMatch) return exactMatch.id;
+
+    // Popularity only breaks ties — no exact match means no result
+    return null;
+  } catch (err: any) {
+    console.log(`[scraper] artist search "${artistName}": ${err.response?.status || err.message}`);
+    return null;
+  }
+}
+
+async function resolveArtistIds(
+  artistNames: string[],
+  searchToken: string
+): Promise<Record<string, string>> {
+  const artistIdMap: Record<string, string> = {};
+
+  // Fetch any IDs already stored in Supabase
+  const { data: existing, error: fetchError } = await supabase
+    .from('artists')
+    .select('name, spotify_id')
+    .in('name', artistNames);
+
+  if (fetchError) {
+    console.log('[scraper] Warning: could not fetch artists table:', fetchError.message);
+  } else {
+    (existing || []).forEach((a: { name: string; spotify_id: string }) => {
+      artistIdMap[a.name] = a.spotify_id;
+    });
+    console.log(`[scraper] ${Object.keys(artistIdMap).length} artist IDs loaded from cache`);
+  }
+
+  // Search for artists we don't have yet
+  const missing = artistNames.filter((n) => !artistIdMap[n]);
+  if (missing.length === 0) return artistIdMap;
+
+  console.log(`[scraper] Searching Spotify for ${missing.length} unknown artists...`);
+  const newArtists: { name: string; spotify_id: string }[] = [];
+
+  for (let i = 0; i < missing.length; i += 3) {
+    const batch = missing.slice(i, i + 3);
+    const results = await Promise.all(
+      batch.map(async (name) => {
+        const id = await searchSpotifyArtist(name, searchToken);
+        return id ? { name, spotify_id: id } : null;
+      })
+    );
+    results.forEach((r) => {
+      if (r) {
+        artistIdMap[r.name] = r.spotify_id;
+        newArtists.push(r);
+      }
+    });
+  }
+
+  if (newArtists.length > 0) {
+    const { error: upsertError } = await supabase
+      .from('artists')
+      .upsert(newArtists, { onConflict: 'name' });
+    if (upsertError) {
+      console.log('[scraper] Warning: could not save artist IDs:', upsertError.message);
+    } else {
+      console.log(`[scraper] Stored ${newArtists.length} new artist IDs`);
+    }
+  }
+
+  return artistIdMap;
+}
+
 async function main() {
   console.log('[scraper] Starting Atlanta venues scrape...');
 
@@ -214,6 +334,19 @@ async function main() {
 
   const allShows = results.flatMap((r) => r.shows);
   allShows.sort((a, b) => new Date(a.datetime).getTime() - new Date(b.datetime).getTime());
+
+  // Resolve Spotify artist IDs for all unique artists
+  const uniqueArtistNames = [...new Set(allShows.map((s) => s.artist))];
+  const searchToken = await getClientCredentialsToken();
+  if (searchToken) {
+    const artistIdMap = await resolveArtistIds(uniqueArtistNames, searchToken);
+    allShows.forEach((show) => {
+      const id = artistIdMap[show.artist];
+      if (id) show.spotifyArtistId = id;
+    });
+    const resolved = allShows.filter((s) => s.spotifyArtistId).length;
+    console.log(`[scraper] ${resolved}/${allShows.length} shows have Spotify artist IDs`);
+  }
 
   const venues = results.map((r) => ({
     id: r.venueId,
