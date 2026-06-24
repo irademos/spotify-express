@@ -358,14 +358,30 @@ document.addEventListener('DOMContentLoaded', function () {
                     }
                 });
 
+                const artistLink = document.createElement('a');
+                artistLink.className = 'artist-name-link';
+                artistLink.textContent = artistName;
+                artistLink.target = '_blank';
+                artistLink.rel = 'noopener noreferrer';
+                const spotifyId = show.spotifyArtistIds?.[idx];
+                artistLink.href = spotifyId
+                    ? `https://open.spotify.com/artist/${spotifyId}`
+                    : `https://open.spotify.com/search/${encodeURIComponent(artistName)}`;
+
                 chip.appendChild(playBtn);
-                chip.appendChild(document.createTextNode(artistName));
+                chip.appendChild(artistLink);
                 artistsDiv.appendChild(chip);
             });
 
             const venueDiv = document.createElement('div');
             venueDiv.className = 'show-venue-name';
-            venueDiv.textContent = show.venue;
+            const venueLink = document.createElement('a');
+            venueLink.className = 'venue-link';
+            venueLink.textContent = show.venue;
+            venueLink.href = `https://www.google.com/maps/search/${encodeURIComponent(show.venue + ' Atlanta GA')}`;
+            venueLink.target = '_blank';
+            venueLink.rel = 'noopener noreferrer';
+            venueDiv.appendChild(venueLink);
 
             li.appendChild(dateDiv);
             li.appendChild(artistsDiv);
