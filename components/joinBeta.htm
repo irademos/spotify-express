@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Join Beta — Spotify Tools</title>
+    <link rel="stylesheet" href="/styles.css">
+    <style>
+        #betaForm input[type="text"],
+        #betaForm input[type="email"] {
+            display: block;
+            width: 80%;
+            margin: 10px auto;
+            padding: 10px;
+            box-sizing: border-box;
+        }
+        #betaForm button[type="submit"] {
+            margin-top: 12px;
+        }
+        #successMessage p {
+            margin: 8px 0;
+            color: #555;
+        }
+        .spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid #ccc;
+            border-top-color: #333;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            vertical-align: middle;
+            margin-right: 6px;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        #errorMsg {
+            color: #c0392b;
+            margin-top: 10px;
+            display: none;
+        }
+        .back-link {
+            display: inline-block;
+            margin-top: 16px;
+            color: #555;
+            text-decoration: underline;
+            cursor: pointer;
+            background: none;
+            border: none;
+            font-size: 0.9em;
+            padding: 0;
+        }
+        .back-link:hover {
+            background: none;
+            color: #111;
+        }
+    </style>
+</head>
+<body>
+    <div>
+        <div id="betaForm">
+            <h1>Join the Beta</h1>
+            <p>Get early access to Spotify Tools. Enter your info and we'll be in touch.</p>
+            <form id="joinBetaForm" onsubmit="handleSubmit(event)">
+                <input type="text" id="fullName" placeholder="Full Name" required autocomplete="name">
+                <input type="email" id="emailInput" placeholder="Email Address" required autocomplete="email">
+                <button type="submit" id="submitBtn">Submit</button>
+            </form>
+            <p id="errorMsg"></p>
+            <button class="back-link" onclick="window.location.href='/'">Back to home</button>
+        </div>
+
+        <div id="successMessage" style="display:none">
+            <h1>Request Sent!</h1>
+            <p>Thanks! Your beta request has been received.</p>
+            <p id="waitingStatus">
+                <span class="spinner"></span>Waiting for email confirmation&hellip;
+            </p>
+            <p style="color:#888; font-size:0.9em">We'll reach out to you at <strong id="confirmedEmail"></strong> once a spot opens up.</p>
+            <button class="back-link" onclick="window.location.href='/'">Back to home</button>
+        </div>
+    </div>
+
+    <script>
+        async function handleSubmit(event) {
+            event.preventDefault();
+
+            const fullName = document.getElementById('fullName').value.trim();
+            const email = document.getElementById('emailInput').value.trim();
+            const submitBtn = document.getElementById('submitBtn');
+            const errorMsg = document.getElementById('errorMsg');
+
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Sending...';
+            errorMsg.style.display = 'none';
+
+            try {
+                const res = await fetch('/api/join-beta', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ fullName, email }),
+                });
+
+                if (!res.ok) {
+                    const data = await res.json().catch(() => ({}));
+                    throw new Error(data.error || 'Something went wrong. Please try again.');
+                }
+
+                document.getElementById('confirmedEmail').textContent = email;
+                document.getElementById('betaForm').style.display = 'none';
+                document.getElementById('successMessage').style.display = 'block';
+            } catch (err) {
+                errorMsg.textContent = err.message;
+                errorMsg.style.display = 'block';
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Submit';
+            }
+        }
+    </script>
+</body>
+</html>

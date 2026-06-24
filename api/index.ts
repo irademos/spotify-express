@@ -3,6 +3,7 @@ require('dotenv').config();
 const express = require('express');
 const axios = require('axios');
 const cheerio = require('cheerio');
+const nodemailer = require('nodemailer');
 const { createClient } = require('@supabase/supabase-js');
 const app = express();
 const bodyParser = require('body-parser');
@@ -22,6 +23,13 @@ app.use('/api/refresh', refreshRoute);        // Refresh route
 
 // Create application/x-www-form-urlencoded parser
 const urlencodedParser = bodyParser.urlencoded({ extended: false });
+
+function requireSpotifyAuth(req: any, res: any, next: any) {
+    if (!req.cookies.spotifyAccessToken) {
+        return res.redirect('/');
+    }
+    next();
+}
 
 app.get('/api/config', (req, res) => {
     res.json({
@@ -84,15 +92,15 @@ interface Track {
   artist: string;
 }
 
-app.get('/auto-playlist', function (req, res) {
+app.get('/auto-playlist', requireSpotifyAuth, function (req: any, res: any) {
   res.sendFile(path.join(__dirname, '..', 'components', 'autoPlaylist.htm'));
 });
 
-app.get('/ai-dj', function (req, res) {
+app.get('/ai-dj', requireSpotifyAuth, function (req: any, res: any) {
   res.sendFile(path.join(__dirname, '..', 'components', 'aiDj.htm'));
 });
 
-app.get('/atlanta-shows', function (req, res) {
+app.get('/atlanta-shows', requireSpotifyAuth, function (req: any, res: any) {
   res.sendFile(path.join(__dirname, '..', 'components', 'atlantaShows.htm'));
 });
 
@@ -283,39 +291,46 @@ app.get('/api/me', (req, res) => {
   });
 });
 
-app.get('/dashboard', function (req, res) {
-    const accessToken = req.cookies.spotifyAccessToken;
-    // const token = document.cookie.match(/spotifyAccessToken=([^;]+)/)?.[1];
-    // console.log(accessToken);
-    
-    if (accessToken) {
-      fetch('https://api.spotify.com/v1/me', {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${accessToken}`
-        }
-      })
-      .then(async response => {
-        console.log("Status:", response.status);
-        if (!response.ok) {
-          const text = await response.text(); // In case it's not JSON
-          console.error("Spotify API error:", text);
-          return;
-        }
-        const data = await response.json();
-        console.log("User Data:", data);
-        
-        res.sendFile(path.join(__dirname, '..', 'components', 'dashboard.htm'));
-          
-      })
-      .catch(error => {
-        console.error('Error fetching user data:', error);
-        res.send('Error fetching user data');
-      });
-    } else {
-      res.send('You are not logged in.');
+app.get('/dashboard', requireSpotifyAuth, function (req: any, res: any) {
+    res.sendFile(path.join(__dirname, '..', 'components', 'dashboard.htm'));
+});
+
+app.get('/join-beta', function (req: any, res: any) {
+    res.sendFile(path.join(__dirname, '..', 'components', 'joinBeta.htm'));
+});
+
+app.post('/api/join-beta', async (req: any, res: any) => {
+    const { fullName, email } = req.body;
+    if (!fullName || !email) {
+        return res.status(400).json({ error: 'Full name and email are required.' });
     }
-  });
+
+    const transporter = nodemailer.createTransport({
+        host: process.env.SMTP_HOST,
+        port: parseInt(process.env.SMTP_PORT || '587'),
+        secure: process.env.SMTP_SECURE === 'true',
+        auth: {
+            user: process.env.SMTP_USER,
+            pass: process.env.SMTP_PASS,
+        },
+    });
+
+    const mailOptions = {
+        from: process.env.EMAIL_FROM || process.env.SMTP_USER,
+        to: 'shmawhoo@gmail.com',
+        subject: 'New Beta Request — Spotify Tools',
+        text: `New beta signup request:\n\nName: ${fullName}\nEmail: ${email}\n`,
+        html: `<h2>New Beta Signup Request</h2><p><strong>Name:</strong> ${fullName}</p><p><strong>Email:</strong> ${email}</p>`,
+    };
+
+    try {
+        await transporter.sendMail(mailOptions);
+        res.json({ ok: true });
+    } catch (err: any) {
+        console.error('[join-beta] Email error:', err.message);
+        res.status(500).json({ error: 'Failed to send request. Please try again.' });
+    }
+});
   
   
   
