@@ -6,6 +6,7 @@ document.addEventListener('DOMContentLoaded', function () {
     // Spotify player state
     let player = null;
     let spotifyDeviceId = null;
+    // currentPlayingKey format: "datetime|venue::artist::idx"
     let currentPlayingKey = null;
     let isPlaying = false;
     let lastPosition = 0;
@@ -46,7 +47,11 @@ document.addEventListener('DOMContentLoaded', function () {
     };
 
     function showKey(show) {
-        return show.artist + '|' + show.datetime;
+        return show.datetime + '|' + show.venue;
+    }
+
+    function artistKey(show, idx) {
+        return showKey(show) + '::artist::' + idx;
     }
 
     function getVisibleShows() {
@@ -62,16 +67,35 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function playNextArtist() {
+        if (!currentPlayingKey) return;
+
+        const sep = '::artist::';
+        const sepIdx = currentPlayingKey.indexOf(sep);
+        const showPart = currentPlayingKey.slice(0, sepIdx);
+        const artistIdx = parseInt(currentPlayingKey.slice(sepIdx + sep.length));
+
         const visible = getVisibleShows();
-        const currentIdx = visible.findIndex(s => showKey(s) === currentPlayingKey);
-        if (currentIdx === -1) {
+        const currentShowIdx = visible.findIndex(s => showKey(s) === showPart);
+
+        if (currentShowIdx === -1) {
             currentPlayingKey = null;
             updateAllPlayButtons();
             return;
         }
-        const nextIdx = currentIdx + 1;
-        if (nextIdx < visible.length) {
-            playShow(visible[nextIdx]);
+
+        const currentShow = visible[currentShowIdx];
+        const nextArtistIdx = artistIdx + 1;
+
+        // Try next artist within the same event first
+        if (nextArtistIdx < currentShow.artists.length) {
+            playShow(currentShow, nextArtistIdx);
+            return;
+        }
+
+        // No more artists in this event — move to next event
+        const nextShowIdx = currentShowIdx + 1;
+        if (nextShowIdx < visible.length) {
+            playShow(visible[nextShowIdx], 0);
         } else {
             currentPlayingKey = null;
             updateAllPlayButtons();
@@ -86,36 +110,45 @@ document.addEventListener('DOMContentLoaded', function () {
             .replace(/[^a-z0-9]/g, '');
     }
 
-    async function playShow(show) {
+    async function playShow(show, artistIdx = 0) {
         if (!spotifyDeviceId) {
             alert('Spotify player not ready yet. Please wait a moment and try again.');
             return;
         }
 
         lastPosition = 0;
-        const key = showKey(show);
+        const artistName = show.artists[artistIdx];
+        const key = artistKey(show, artistIdx);
 
         try {
             // Use stored artist ID when available — skip the search entirely
-            let artistId = show.spotifyArtistId || null;
+            let artistId = show.spotifyArtistIds?.[artistIdx] || null;
 
             if (!artistId) {
-                // Search with quotes to reduce noise; validate by exact normalized name
                 const searchRes = await fetchWithSpotifyAuth(
-                    `https://api.spotify.com/v1/search?q=${encodeURIComponent('"' + show.artist + '"')}&type=artist&limit=10`
+                    `https://api.spotify.com/v1/search?q=${encodeURIComponent('"' + artistName + '"')}&type=artist&limit=10`
                 );
                 const searchData = await searchRes.json();
                 const items = searchData.artists?.items || [];
-                const normalTarget = normalizeArtistName(show.artist);
+                const normalTarget = normalizeArtistName(artistName);
 
-                // Exact name match wins
                 const exactMatch = items.find(a => normalizeArtistName(a.name) === normalTarget);
                 if (exactMatch) {
                     artistId = exactMatch.id;
                 } else {
-                    // Popularity only breaks ties — pick highest among remaining
                     const sorted = [...items].sort((a, b) => b.popularity - a.popularity);
                     artistId = sorted[0]?.id || null;
+                }
+
+                // Cache the found ID locally and persist to Supabase
+                if (artistId) {
+                    if (!show.spotifyArtistIds) show.spotifyArtistIds = [];
+                    show.spotifyArtistIds[artistIdx] = artistId;
+                    fetch('/api/cache-artist-id', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name: artistName, spotifyId: artistId })
+                    }).catch(() => {});
                 }
             }
 
@@ -139,7 +172,7 @@ document.addEventListener('DOMContentLoaded', function () {
             isPlaying = true;
             updateAllPlayButtons();
         } catch (err) {
-            console.error('Error playing artist:', show.artist, err);
+            console.error('Error playing artist:', artistName, err);
         }
     }
 
@@ -285,8 +318,6 @@ document.addEventListener('DOMContentLoaded', function () {
 
         visible.forEach((show) => {
             const date = parseDate(show.datetime);
-            const key = showKey(show);
-            const isActive = key === currentPlayingKey && isPlaying;
 
             const li = document.createElement('li');
             li.className = 'show-item';
@@ -295,40 +326,49 @@ document.addEventListener('DOMContentLoaded', function () {
             dateDiv.className = 'show-date';
             dateDiv.innerHTML = `<div class="date-main">${escHtml(date.monthStr)} ${date.dayNum}</div><div class="date-sub">${date.dayOfWeek}, ${date.year}</div>`;
 
-            const artistDiv = document.createElement('div');
-            artistDiv.className = 'show-artist';
+            const artistsDiv = document.createElement('div');
+            artistsDiv.className = 'show-artists';
 
-            const playBtn = document.createElement('button');
-            playBtn.className = 'play-btn';
-            playBtn.dataset.key = key;
-            playBtn.textContent = isActive ? '⏸' : '▶';
-            playBtn.title = isActive ? 'Pause' : 'Play';
+            show.artists.forEach((artistName, idx) => {
+                const key = artistKey(show, idx);
+                const isActive = key === currentPlayingKey && isPlaying;
 
-            playBtn.addEventListener('click', async () => {
-                if (key === currentPlayingKey) {
-                    if (isPlaying) {
-                        player?.pause();
-                        isPlaying = false;
-                        updateAllPlayButtons();
+                const chip = document.createElement('span');
+                chip.className = 'artist-chip';
+
+                const playBtn = document.createElement('button');
+                playBtn.className = 'play-btn';
+                playBtn.dataset.key = key;
+                playBtn.textContent = isActive ? '⏸' : '▶';
+                playBtn.title = isActive ? 'Pause' : 'Play';
+
+                playBtn.addEventListener('click', async () => {
+                    if (key === currentPlayingKey) {
+                        if (isPlaying) {
+                            player?.pause();
+                            isPlaying = false;
+                            updateAllPlayButtons();
+                        } else {
+                            player?.resume();
+                            isPlaying = true;
+                            updateAllPlayButtons();
+                        }
                     } else {
-                        player?.resume();
-                        isPlaying = true;
-                        updateAllPlayButtons();
+                        await playShow(show, idx);
                     }
-                } else {
-                    await playShow(show);
-                }
-            });
+                });
 
-            artistDiv.appendChild(playBtn);
-            artistDiv.appendChild(document.createTextNode(show.artist));
+                chip.appendChild(playBtn);
+                chip.appendChild(document.createTextNode(artistName));
+                artistsDiv.appendChild(chip);
+            });
 
             const venueDiv = document.createElement('div');
             venueDiv.className = 'show-venue-name';
             venueDiv.textContent = show.venue;
 
             li.appendChild(dateDiv);
-            li.appendChild(artistDiv);
+            li.appendChild(artistsDiv);
             li.appendChild(venueDiv);
             ul.appendChild(li);
         });
@@ -351,7 +391,16 @@ document.addEventListener('DOMContentLoaded', function () {
                 return res.json();
             })
             .then(data => {
-                allShows = data.shows || [];
+                // Normalize to always have artists array (handles old cached data with single artist)
+                allShows = (data.shows || []).map(show => {
+                    if (!show.artists) {
+                        show.artists = show.artist ? [show.artist] : [];
+                    }
+                    if (!show.spotifyArtistIds && show.spotifyArtistId) {
+                        show.spotifyArtistIds = [show.spotifyArtistId];
+                    }
+                    return show;
+                });
 
                 // Build venues list; filter out entries with no name (name===null means unknown)
                 const rawVenues = data.venues || [];

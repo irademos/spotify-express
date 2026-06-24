@@ -159,7 +159,7 @@
             display: grid;
             grid-template-columns: 96px 1fr 1fr;
             gap: 12px;
-            align-items: center;
+            align-items: start;
             padding: 14px 0;
             border-bottom: 1px solid #eee;
         }
@@ -177,13 +177,22 @@
             margin-top: 2px;
         }
 
-        .show-artist {
+        .show-artists {
             font-weight: 600;
             font-size: 15px;
             color: #111;
             display: flex;
+            flex-wrap: wrap;
             align-items: center;
             gap: 6px;
+            row-gap: 8px;
+        }
+
+        .artist-chip {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            white-space: nowrap;
         }
 
         .play-btn {
