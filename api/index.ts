@@ -10,10 +10,9 @@ const path = require('path');
 const cookieParser = require('cookie-parser');
 const refreshRoute = require('./refresh');
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_ANON_KEY
-);
+const supabase = process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY
+  ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
+  : null;
 
 app.use(cookieParser());
 app.use(bodyParser.json());
@@ -97,6 +96,9 @@ app.get('/atlanta-shows', function (req, res) {
 });
 
 app.get('/api/atlanta-shows', async (req, res) => {
+    if (!supabase) {
+        return res.status(503).json({ error: 'Supabase not configured', shows: [], venues: [] });
+    }
     try {
         const { data, error } = await supabase
             .from('atlanta_shows_cache')
