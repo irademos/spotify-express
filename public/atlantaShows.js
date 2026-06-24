@@ -323,8 +323,35 @@ document.addEventListener('DOMContentLoaded', function () {
             li.className = 'show-item';
 
             const dateDiv = document.createElement('div');
-            dateDiv.className = 'show-date';
-            dateDiv.innerHTML = `<div class="date-main">${escHtml(date.monthStr)} ${date.dayNum}</div><div class="date-sub">${date.dayOfWeek}, ${date.year}</div>`;
+            dateDiv.className = 'show-date-cell';
+
+            if (show.firstArtistAvatarUrl) {
+                const avatar = document.createElement('img');
+                avatar.className = 'artist-avatar';
+                avatar.src = show.firstArtistAvatarUrl;
+                avatar.alt = show.artists[0] || '';
+                avatar.loading = 'lazy';
+                dateDiv.appendChild(avatar);
+            }
+
+            const dateInfo = document.createElement('div');
+            dateInfo.className = 'show-date';
+            const dateContent = `<div class="date-main">${escHtml(date.monthStr)} ${date.dayNum}</div><div class="date-sub">${date.dayOfWeek}, ${date.year}</div>`;
+
+            if (show.concertUri) {
+                const concertId = show.concertUri.split(':')[2];
+                const dateLink = document.createElement('a');
+                dateLink.href = `https://open.spotify.com/concert/${concertId}`;
+                dateLink.target = '_blank';
+                dateLink.rel = 'noopener noreferrer';
+                dateLink.className = 'date-link';
+                dateLink.innerHTML = dateContent;
+                dateInfo.appendChild(dateLink);
+            } else {
+                dateInfo.innerHTML = dateContent;
+            }
+
+            dateDiv.appendChild(dateInfo);
 
             const artistsDiv = document.createElement('div');
             artistsDiv.className = 'show-artists';
