@@ -186,6 +186,7 @@ async function fetchOneVenueViaPlaywright(venueId: string): Promise<{
         let capturedVenueData: any = null;
 
         page.on('request', (request: any) => {
+            console.log('REQ', request.url());
             const url = request.url();
             if ((url.includes('api-partner.spotify.com') || url.includes('spclient.wg.spotify.com')) && !capturedTokens) {
                 const headers = request.headers();
@@ -199,6 +200,7 @@ async function fetchOneVenueViaPlaywright(venueId: string): Promise<{
         });
 
         page.on('response', async (response: any) => {
+            console.log('RESP', response.url());
             const url = response.url();
             if (url.includes('api-partner.spotify.com') && !capturedVenueData) {
                 try {
@@ -212,9 +214,11 @@ async function fetchOneVenueViaPlaywright(venueId: string): Promise<{
         });
 
         await page.goto(`https://open.spotify.com/venue/${venueId}`, {
-            waitUntil: 'networkidle',
+            waitUntil: 'domcontentloaded',
             timeout: 45000,
         });
+
+        await page.waitForTimeout(5000);
 
         if (capturedTokens) {
             // Cache for slightly less than the token's 1-hour lifetime
