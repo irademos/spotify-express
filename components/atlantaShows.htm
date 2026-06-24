@@ -181,6 +181,31 @@
             font-weight: 600;
             font-size: 15px;
             color: #111;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .play-btn {
+            background: none;
+            border: 1px solid #1db954;
+            color: #1db954;
+            border-radius: 50%;
+            width: 28px;
+            height: 28px;
+            min-width: 28px;
+            padding: 0;
+            font-size: 11px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.15s, color 0.15s;
+            flex-shrink: 0;
+        }
+        .play-btn:hover {
+            background: #1db954;
+            color: #fff;
         }
 
         .show-venue-name {
@@ -259,5 +284,6 @@
 
     <script src="/utils.js"></script>
     <script src="/atlantaShows.js"></script>
+    <script src="https://sdk.scdn.co/spotify-player.js"></script>
 </body>
 </html>

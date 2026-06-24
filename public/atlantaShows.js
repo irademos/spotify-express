@@ -3,6 +3,120 @@ document.addEventListener('DOMContentLoaded', function () {
     let venues = [];
     let selectedVenueIds = new Set();
 
+    // Spotify player state
+    let player = null;
+    let spotifyDeviceId = null;
+    let currentPlayingKey = null;
+    let isPlaying = false;
+    let lastPosition = 0;
+
+    window.onSpotifyWebPlaybackSDKReady = () => {
+        const token = document.cookie.match(/spotifyAccessToken=([^;]+)/)?.[1];
+        if (!token) return;
+
+        player = new Spotify.Player({
+            name: 'Atlanta Shows Player',
+            getOAuthToken: cb => { cb(token); },
+            volume: 0.5
+        });
+
+        player.addListener('ready', ({ device_id }) => {
+            spotifyDeviceId = device_id;
+        });
+
+        player.addListener('player_state_changed', (state) => {
+            if (!state) return;
+
+            // Detect natural song end: was playing at a non-zero position, now paused at 0
+            if (isPlaying && state.paused && state.position === 0 && lastPosition > 5000) {
+                isPlaying = false;
+                playNextArtist();
+                return;
+            }
+
+            if (!state.paused) {
+                lastPosition = state.position;
+            }
+
+            isPlaying = !state.paused;
+            updateAllPlayButtons();
+        });
+
+        player.connect();
+    };
+
+    function showKey(show) {
+        return show.artist + '|' + show.datetime;
+    }
+
+    function getVisibleShows() {
+        return allShows.filter(s => selectedVenueIds.has(s.venueId));
+    }
+
+    function updateAllPlayButtons() {
+        document.querySelectorAll('.play-btn').forEach(btn => {
+            const active = btn.dataset.key === currentPlayingKey && isPlaying;
+            btn.textContent = active ? '⏸' : '▶';
+            btn.title = active ? 'Pause' : 'Play';
+        });
+    }
+
+    function playNextArtist() {
+        const visible = getVisibleShows();
+        const currentIdx = visible.findIndex(s => showKey(s) === currentPlayingKey);
+        if (currentIdx === -1) {
+            currentPlayingKey = null;
+            updateAllPlayButtons();
+            return;
+        }
+        const nextIdx = currentIdx + 1;
+        if (nextIdx < visible.length) {
+            playShow(visible[nextIdx]);
+        } else {
+            currentPlayingKey = null;
+            updateAllPlayButtons();
+        }
+    }
+
+    async function playShow(show) {
+        if (!spotifyDeviceId) {
+            alert('Spotify player not ready yet. Please wait a moment and try again.');
+            return;
+        }
+
+        lastPosition = 0;
+        const key = showKey(show);
+
+        try {
+            const searchRes = await fetchWithSpotifyAuth(
+                `https://api.spotify.com/v1/search?q=${encodeURIComponent(show.artist)}&type=artist&limit=1`
+            );
+            const searchData = await searchRes.json();
+            const artistId = searchData.artists?.items?.[0]?.id;
+            if (!artistId) return;
+
+            const tracksRes = await fetchWithSpotifyAuth(
+                `https://api.spotify.com/v1/artists/${artistId}/top-tracks?market=US`
+            );
+            const tracksData = await tracksRes.json();
+            const trackUri = tracksData.tracks?.[0]?.uri;
+            if (!trackUri) return;
+
+            await fetchWithSpotifyAuth(
+                `https://api.spotify.com/v1/me/player/play?device_id=${spotifyDeviceId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ uris: [trackUri] })
+            });
+
+            currentPlayingKey = key;
+            isPlaying = true;
+            updateAllPlayButtons();
+        } catch (err) {
+            console.error('Error playing artist:', show.artist, err);
+        }
+    }
+
     document.getElementById('backBtn').addEventListener('click', () => {
         window.location.href = '/dashboard';
     });
@@ -143,18 +257,53 @@ document.addEventListener('DOMContentLoaded', function () {
         const ul = document.createElement('ul');
         ul.className = 'shows-list';
 
-        visible.forEach(show => {
+        visible.forEach((show) => {
             const date = parseDate(show.datetime);
+            const key = showKey(show);
+            const isActive = key === currentPlayingKey && isPlaying;
+
             const li = document.createElement('li');
             li.className = 'show-item';
-            li.innerHTML = `
-                <div class="show-date">
-                    <div class="date-main">${escHtml(date.monthStr)} ${date.dayNum}</div>
-                    <div class="date-sub">${date.dayOfWeek}, ${date.year}</div>
-                </div>
-                <div class="show-artist">${escHtml(show.artist)}</div>
-                <div class="show-venue-name">${escHtml(show.venue)}</div>
-            `;
+
+            const dateDiv = document.createElement('div');
+            dateDiv.className = 'show-date';
+            dateDiv.innerHTML = `<div class="date-main">${escHtml(date.monthStr)} ${date.dayNum}</div><div class="date-sub">${date.dayOfWeek}, ${date.year}</div>`;
+
+            const artistDiv = document.createElement('div');
+            artistDiv.className = 'show-artist';
+
+            const playBtn = document.createElement('button');
+            playBtn.className = 'play-btn';
+            playBtn.dataset.key = key;
+            playBtn.textContent = isActive ? '⏸' : '▶';
+            playBtn.title = isActive ? 'Pause' : 'Play';
+
+            playBtn.addEventListener('click', async () => {
+                if (key === currentPlayingKey) {
+                    if (isPlaying) {
+                        player?.pause();
+                        isPlaying = false;
+                        updateAllPlayButtons();
+                    } else {
+                        player?.resume();
+                        isPlaying = true;
+                        updateAllPlayButtons();
+                    }
+                } else {
+                    await playShow(show);
+                }
+            });
+
+            artistDiv.appendChild(playBtn);
+            artistDiv.appendChild(document.createTextNode(show.artist));
+
+            const venueDiv = document.createElement('div');
+            venueDiv.className = 'show-venue-name';
+            venueDiv.textContent = show.venue;
+
+            li.appendChild(dateDiv);
+            li.appendChild(artistDiv);
+            li.appendChild(venueDiv);
             ul.appendChild(li);
         });
 
