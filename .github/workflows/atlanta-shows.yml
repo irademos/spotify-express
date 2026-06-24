@@ -18,14 +18,14 @@ jobs:
         with:
           node-version: 22
 
-      - name: Install
+      - name: Install dependencies
         run: npm ci
 
       - name: Install Playwright Browsers
-        run: npx playwright install chromium
+        run: npx playwright install chromium --with-deps
 
       - name: Run scraper
-        run: node scripts/update-atlanta-shows.js
+        run: npx ts-node scripts/scrapeSpotifyVenues.ts
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
