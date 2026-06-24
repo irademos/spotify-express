@@ -1,0 +1,31 @@
+name: Update Atlanta Shows
+
+on:
+  schedule:
+    - cron: '0 * * * *'   # every hour
+  workflow_dispatch:
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install
+        run: npm ci
+
+      - name: Install Playwright Browsers
+        run: npx playwright install chromium
+
+      - name: Run scraper
+        run: node scripts/update-atlanta-shows.js
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
