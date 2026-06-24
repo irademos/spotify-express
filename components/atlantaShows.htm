@@ -157,13 +157,36 @@
 
         .show-item {
             display: grid;
-            grid-template-columns: 96px 1fr 1fr;
+            grid-template-columns: 148px 1fr 1fr;
             gap: 12px;
             align-items: start;
             padding: 14px 0;
             border-bottom: 1px solid #eee;
         }
         .show-item:first-child { border-top: 1px solid #eee; }
+
+        .show-date-cell {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .artist-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            object-fit: cover;
+            flex-shrink: 0;
+        }
+
+        .date-link {
+            color: inherit;
+            text-decoration: none;
+            display: block;
+        }
+        .date-link:hover .date-main {
+            color: #1db954;
+        }
 
         .show-date .date-main {
             font-size: 18px;
@@ -275,8 +298,9 @@
         .retry-link:hover { color: #158f3f; }
 
         @media (max-width: 560px) {
-            .show-item { grid-template-columns: 80px 1fr; }
+            .show-item { grid-template-columns: 120px 1fr; }
             .show-venue-name { text-align: left; grid-column: 2; margin-top: -8px; }
+            .artist-avatar { width: 32px; height: 32px; }
         }
     </style>
 </head>

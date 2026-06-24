@@ -47,6 +47,8 @@ interface Show {
   venue: string;
   venueId: string;
   spotifyArtistIds?: (string | null)[];
+  concertUri?: string;
+  firstArtistAvatarUrl?: string;
 }
 
 interface VenueResult {
@@ -73,17 +75,38 @@ function parseVenueApiResponse(venueData: any, venueId: string): VenueResult {
     const datetime = d.startDateIsoString || d.startDate;
     const artistItems: any[] = d.artists?.items || [];
 
-    let artists: string[] = artistItems
-      .map((item: any) => item?.data?.profile?.name)
-      .filter(Boolean);
+    const artists: string[] = [];
+    const spotifyArtistIds: (string | null)[] = [];
+
+    artistItems.forEach((item: any) => {
+      const name = item?.data?.profile?.name;
+      if (name) {
+        artists.push(name);
+        const uri: string | undefined = item?.data?.uri; // "spotify:artist:<id>"
+        spotifyArtistIds.push(uri ? (uri.split(':')[2] || null) : null);
+      }
+    });
 
     // Fall back to title, which may be comma-separated artist names
     if (artists.length === 0 && d.title) {
-      artists = d.title.split(',').map((a: string) => a.trim()).filter(Boolean);
+      d.title.split(',').map((a: string) => a.trim()).filter(Boolean).forEach((name: string) => {
+        artists.push(name);
+        spotifyArtistIds.push(null);
+      });
     }
 
+    const concertUri: string | null = d.uri || null; // "spotify:concert:<id>"
+    const firstArtistAvatarUrl: string | null =
+      artistItems[0]?.data?.visuals?.avatarImage?.sources?.[0]?.url ?? null;
+
     const venue = d.location?.name || venueName;
-    if (datetime && artists.length > 0) shows.push({ datetime, artists, venue, venueId });
+    if (datetime && artists.length > 0) {
+      const show: Show = { datetime, artists, venue, venueId };
+      if (spotifyArtistIds.some(id => id !== null)) show.spotifyArtistIds = spotifyArtistIds;
+      if (concertUri) show.concertUri = concertUri;
+      if (firstArtistAvatarUrl) show.firstArtistAvatarUrl = firstArtistAvatarUrl;
+      shows.push(show);
+    }
   });
 
   return { venueId, venueName, shows };
@@ -344,17 +367,44 @@ async function main() {
   const allShows = results.flatMap((r) => r.shows);
   allShows.sort((a, b) => new Date(a.datetime).getTime() - new Date(b.datetime).getTime());
 
-  // Resolve Spotify artist IDs for all unique artists across all shows
-  const uniqueArtistNames = [...new Set(allShows.flatMap((s) => s.artists))];
-  const searchToken = await getClientCredentialsToken();
-  if (searchToken) {
-    const artistIdMap = await resolveArtistIds(uniqueArtistNames, searchToken);
-    allShows.forEach((show) => {
-      show.spotifyArtistIds = show.artists.map((name) => artistIdMap[name] || null);
+  // Collect artist IDs already embedded in shows from the partner API URIs
+  const artistIdFromApi = new Map<string, string>();
+  allShows.forEach((show) => {
+    show.artists.forEach((name, idx) => {
+      const id = show.spotifyArtistIds?.[idx];
+      if (id) artistIdFromApi.set(name, id);
     });
-    const resolved = allShows.filter((s) => s.spotifyArtistIds?.some((id) => id !== null)).length;
-    console.log(`[scraper] ${resolved}/${allShows.length} shows have at least one Spotify artist ID`);
+  });
+
+  // Upsert partner-API-sourced artist IDs into Supabase
+  if (artistIdFromApi.size > 0) {
+    const toUpsert = Array.from(artistIdFromApi.entries()).map(([name, spotify_id]) => ({ name, spotify_id }));
+    const { error: upsertErr } = await supabase.from('artists').upsert(toUpsert, { onConflict: 'name' });
+    if (upsertErr) {
+      console.log('[scraper] Warning: could not upsert API artist IDs:', upsertErr.message);
+    } else {
+      console.log(`[scraper] Upserted ${toUpsert.length} artists from partner API`);
+    }
   }
+
+  // For artists whose ID wasn't in the partner API response (title-fallback cases), search Spotify
+  const allArtistNames = [...new Set(allShows.flatMap((s) => s.artists))];
+  const stillMissing = allArtistNames.filter(name => !artistIdFromApi.has(name));
+  const searchToken = await getClientCredentialsToken();
+  if (searchToken && stillMissing.length > 0) {
+    const artistIdMap = await resolveArtistIds(stillMissing, searchToken);
+    allShows.forEach((show) => {
+      show.artists.forEach((name, idx) => {
+        if (!show.spotifyArtistIds?.[idx] && artistIdMap[name]) {
+          if (!show.spotifyArtistIds) show.spotifyArtistIds = show.artists.map(() => null);
+          show.spotifyArtistIds[idx] = artistIdMap[name];
+        }
+      });
+    });
+  }
+
+  const resolved = allShows.filter((s) => s.spotifyArtistIds?.some((id) => id !== null)).length;
+  console.log(`[scraper] ${resolved}/${allShows.length} shows have at least one Spotify artist ID`);
 
   const venues = results.map((r) => ({
     id: r.venueId,
