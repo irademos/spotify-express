@@ -2,7 +2,7 @@ name: Update Atlanta Shows
 
 on:
   schedule:
-    - cron: '0 * * * *'   # every hour
+    - cron: '0 8 * * 1,4'
   workflow_dispatch:
 
 jobs:
