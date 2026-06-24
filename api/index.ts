@@ -218,8 +218,7 @@ async function fetchOneVenueViaPlaywright(venueId: string): Promise<{
             timeout: 45000,
         });
         await page.waitForSelector('body', { timeout: 5000 });
-        await page.waitForTimeout(5000);
-        await page.waitForTimeout(5000);
+        await page.waitForTimeout(1500);
 
         if (capturedTokens) {
             // Cache for slightly less than the token's 1-hour lifetime
