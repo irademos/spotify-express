@@ -78,6 +78,14 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
+    function normalizeArtistName(name) {
+        return name
+            .toLowerCase()
+            .normalize('NFD')
+            .replace(/[̀-ͯ]/g, '')
+            .replace(/[^a-z0-9]/g, '');
+    }
+
     async function playShow(show) {
         if (!spotifyDeviceId) {
             alert('Spotify player not ready yet. Please wait a moment and try again.');
@@ -88,11 +96,29 @@ document.addEventListener('DOMContentLoaded', function () {
         const key = showKey(show);
 
         try {
-            const searchRes = await fetchWithSpotifyAuth(
-                `https://api.spotify.com/v1/search?q=${encodeURIComponent(show.artist)}&type=artist&limit=1`
-            );
-            const searchData = await searchRes.json();
-            const artistId = searchData.artists?.items?.[0]?.id;
+            // Use stored artist ID when available — skip the search entirely
+            let artistId = show.spotifyArtistId || null;
+
+            if (!artistId) {
+                // Search with quotes to reduce noise; validate by exact normalized name
+                const searchRes = await fetchWithSpotifyAuth(
+                    `https://api.spotify.com/v1/search?q=${encodeURIComponent('"' + show.artist + '"')}&type=artist&limit=10`
+                );
+                const searchData = await searchRes.json();
+                const items = searchData.artists?.items || [];
+                const normalTarget = normalizeArtistName(show.artist);
+
+                // Exact name match wins
+                const exactMatch = items.find(a => normalizeArtistName(a.name) === normalTarget);
+                if (exactMatch) {
+                    artistId = exactMatch.id;
+                } else {
+                    // Popularity only breaks ties — pick highest among remaining
+                    const sorted = [...items].sort((a, b) => b.popularity - a.popularity);
+                    artistId = sorted[0]?.id || null;
+                }
+            }
+
             if (!artistId) return;
 
             const tracksRes = await fetchWithSpotifyAuth(
