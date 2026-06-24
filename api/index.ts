@@ -4,12 +4,10 @@ const express = require('express');
 const axios = require('axios');
 const cheerio = require('cheerio');
 const app = express();
-const { sql } = require('@vercel/postgres');
 const bodyParser = require('body-parser');
 const path = require('path');
 const cookieParser = require('cookie-parser');
 const refreshRoute = require('./refresh');
-const crypto = require('crypto');
 
 app.use(cookieParser());
 app.use(bodyParser.json());
@@ -122,207 +120,117 @@ const ATLANTA_VENUE_IDS = [
 let atlantaCache: { data: any; fetchedAt: number } | null = null;
 const ATLANTA_CACHE_TTL = 60 * 60 * 1000; // 1 hour
 
-// Spotify web-player client ID (public, used by open.spotify.com)
-const SP_WP_CLIENT_ID = 'd8a5ed958d274c2e8ee717e6a4b0971d';
-const SP_WP_VERSION   = '1.2.93.531.g966e7504';
-const UA =
- 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36';
+const SP_WP_VERSION = '1.2.93.577.g601a69db';
+const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36';
 
-let webTokenCache: { clientToken: string; accessToken: string; expiresAt: number } | null = null;
+// In-memory token cache — Spotify bearer tokens last ~1 hour
+let browserTokenCache: { accessToken: string; clientToken: string; expiresAt: number } | null = null;
 
-async function getSpotifyWebToken(): Promise<{ clientToken: string; accessToken: string } | null> {
-    if (webTokenCache && Date.now() < webTokenCache.expiresAt - 60000) {
-        return webTokenCache;
+function parseVenueApiResponse(venueData: any, venueId: string): VenueResult {
+    const venueName = venueData.name || venueId;
+    const shows: Show[] = [];
+    const concerts: any[] = venueData.concerts?.items || [];
+
+    concerts.forEach((c: any) => {
+        // The API wraps each concert in a { data: {...} } envelope
+        const d = c.data || c;
+        const datetime = d.startDateIsoString || d.startDate;
+        const artistItems: any[] = d.artists?.items || [];
+        const artist = artistItems[0]?.data?.profile?.name || d.title;
+        const venue = d.location?.name || venueName;
+        if (datetime && artist) shows.push({ datetime, artist, venue, venueId });
+    });
+
+    return { venueId, venueName, shows };
+}
+
+// Launches a headless browser, navigates to a Spotify venue page, and intercepts:
+//   - the auth headers (Bearer + client-token) from outgoing requests
+//   - the venue JSON from the api-partner response
+// Returns the captured tokens (reusable for all other venues via axios) and the
+// venue data for the page we loaded.
+async function fetchOneVenueViaPlaywright(venueId: string): Promise<{
+    tokens: { accessToken: string; clientToken: string } | null;
+    venueResult: VenueResult | null;
+}> {
+    if (browserTokenCache && Date.now() < browserTokenCache.expiresAt - 60000) {
+        console.log('[playwright] reusing cached tokens');
+        return { tokens: browserTokenCache, venueResult: null };
     }
+
+    let pw: any;
     try {
-        const clientRes = await axios.post('https://clienttoken.spotify.com/v1/clienttoken', {
-            client_data: {
-                client_version: SP_WP_VERSION,
-                client_id: SP_WP_CLIENT_ID,
-                js_sdk_data: {
-                    device_brand: 'unknown', device_model: 'unknown',
-                    os: 'windows', os_version: 'NT 10.0',
-                    device_id: crypto.randomUUID(),
-                    device_type: 'computer',
+        pw = require('playwright');
+    } catch {
+        console.error('[playwright] package not available — run: npx playwright install chromium');
+        return { tokens: null, venueResult: null };
+    }
+
+    console.log(`[playwright] launching browser for venue ${venueId}`);
+    const browser = await pw.chromium.launch({ headless: true });
+    try {
+        const context = await browser.newContext({
+            userAgent: UA,
+            locale: 'en-US',
+            extraHTTPHeaders: { 'accept-language': 'en' },
+        });
+        const page = await context.newPage();
+
+        let capturedTokens: { accessToken: string; clientToken: string } | null = null;
+        let capturedVenueData: any = null;
+
+        page.on('request', (request: any) => {
+            const url = request.url();
+            if ((url.includes('api-partner.spotify.com') || url.includes('spclient.wg.spotify.com')) && !capturedTokens) {
+                const headers = request.headers();
+                const auth = headers['authorization'];
+                const clientToken = headers['client-token'];
+                if (auth?.startsWith('Bearer ') && clientToken) {
+                    capturedTokens = { accessToken: auth.slice(7), clientToken };
+                    console.log('[playwright] captured tokens from', url.split('?')[0]);
                 }
             }
-        }, {
-            headers: {
-                'Content-Type': 'application/json',
-                'Accept': 'application/json',
-                'Origin': 'https://open.spotify.com',
-                'Referer': 'https://open.spotify.com/',
-                'User-Agent':
-                UA,
-                'sec-ch-ua':
-                '"Chromium";v="137", "Not/A)Brand";v="99"',
-                'sec-ch-ua-mobile': '?0',
-                'sec-ch-ua-platform': '"Windows"',
-            },
-            timeout: 10000,
         });
 
-        const clientToken = clientRes.data.granted_token?.token;
-        if (!clientToken) {
-            console.log('[atlanta] clienttoken response:', JSON.stringify(clientRes.data).slice(0, 200));
-            return null;
-        }
-        console.log("client token ok", clientToken.slice(0,20));
-
-        const page = await axios.get(
-            "https://open.spotify.com/",
-            {
-                headers: {
-                    "User-Agent": UA,
-                    "Accept": "text/html,application/xhtml+xml"
-                },
-                timeout: 10000
+        page.on('response', async (response: any) => {
+            const url = response.url();
+            if (url.includes('api-partner.spotify.com') && !capturedVenueData) {
+                try {
+                    const json = await response.json();
+                    if (json?.data?.venue) {
+                        capturedVenueData = json.data.venue;
+                        console.log('[playwright] captured venue data for', venueId);
+                    }
+                } catch {}
             }
-        );
+        });
 
-        const cookies = (page.headers["set-cookie"] || [])
-            .map(x => x.split(";")[0])
-            .join("; ");
+        await page.goto(`https://open.spotify.com/venue/${venueId}`, {
+            waitUntil: 'networkidle',
+            timeout: 45000,
+        });
 
-        console.log("spotify cookies:", cookies);
-        console.log(page.status);
-        console.log(page.headers);
-
-        const tokenRes = await axios.get(
-            'https://open.spotify.com/get_access_token',
-            {
-                params: {
-                    reason: 'transport',
-                    productType: 'web_player'
-                },
-                headers: {
-                    'Client-Token': clientToken,
-                    'Origin': 'https://open.spotify.com',
-                    'Referer': 'https://open.spotify.com/',
-                    'User-Agent': UA,
-                    'Accept': 'application/json',
-
-                    'sec-ch-ua':
-                        '"Chromium";v="137", "Not/A)Brand";v="99"',
-                    'sec-ch-ua-mobile': '?0',
-                    'sec-ch-ua-platform': '"Windows"',
-                    'sec-fetch-site': 'same-origin',
-                    'sec-fetch-mode': 'cors',
-                    'sec-fetch-dest': 'empty',
-
-                    ...(cookies ? { Cookie: cookies } : {})
-                },
-                timeout: 10000
-            }
-        );
-
-        const accessToken = tokenRes.data.accessToken;
-        const expiresAt  = tokenRes.data.accessTokenExpirationTimestampMs || (Date.now() + 3600000);
-        if (!accessToken) {
-            console.log('[atlanta] get_access_token response:', JSON.stringify(tokenRes.data).slice(0, 200));
-            return null;
+        if (capturedTokens) {
+            // Cache for slightly less than the token's 1-hour lifetime
+            browserTokenCache = { ...capturedTokens, expiresAt: Date.now() + 50 * 60 * 1000 };
         }
 
-        console.log(`[atlanta] web token obtained, isAnonymous=${tokenRes.data.isAnonymous}`);
-        webTokenCache = { clientToken, accessToken, expiresAt };
-        return webTokenCache;
-    } catch (err: any) {
-        console.error(
-            '[atlanta] getSpotifyWebToken error:',
-            err.response?.status,
-            JSON.stringify(err.response?.data).slice(0,500),
-            err.message
-        );
-        return null;
+        const venueResult = capturedVenueData
+            ? parseVenueApiResponse(capturedVenueData, venueId)
+            : null;
+
+        console.log(`[playwright] ${venueId}: tokens=${!!capturedTokens} venueData=${!!capturedVenueData}`);
+        return { tokens: capturedTokens, venueResult };
+    } finally {
+        await browser.close();
     }
 }
 
-// Try Spotify's partner GraphQL API for venue concert data
-async function tryPartnerApi(venueId: string, accessToken: string, clientToken: string): Promise<VenueResult | null> {
-    const venueUri = `spotify:venue:${venueId}`;
-    try {
-        const variables = JSON.stringify({ uri: venueUri });
-        const extensions = JSON.stringify({
-            persistedQuery: { version: 1, sha256Hash: '9e6ba7d6dd9b65a4fdd0493e1e5e63cbdf6f78c2e0e30e4a9fc97498f95ab9e0' }
-        });
-        const resp = await axios.get('https://api-partner.spotify.com/pathfinder/v1/query', {
-            params: { operationName: 'queryVenuePage', variables, extensions },
-            headers: {
-                Authorization: `Bearer ${accessToken}`,
-                'Client-Token': clientToken,
-                'Accept': 'application/json',
-                'app-platform': 'WebPlayer',
-                'spotify-app-version': SP_WP_VERSION,
-            },
-            timeout: 12000,
-        });
-
-        const d = resp.data?.data;
-        console.log(`[atlanta] partnerApi ${venueId}: keys=${Object.keys(d || {}).join(',')}`);
-
-        const venueData = d?.venueByUri || d?.venue || null;
-        if (!venueData) return null;
-
-        const venueName = venueData.name || venueId;
-        const concerts = venueData.upcomingConcerts?.items || venueData.concerts?.items || [];
-        const shows: Show[] = [];
-        concerts.forEach((c: any) => {
-            const datetime = c.startDateTime || c.startDate || c.date;
-            const artist = c.title || c.name || c.artists?.items?.[0]?.profile?.name || c.artist?.name;
-            if (datetime && artist) shows.push({ datetime, artist, venue: venueName, venueId });
-        });
-
-        return { venueId, venueName, shows };
-    } catch (err: any) {
-        console.log(`[atlanta] partnerApi ${venueId}: ${err.response?.status || err.message}`);
-        return null;
-    }
-}
-
-// Try Spotify's spclient API with whatever access token we have
-async function trySpClient(venueId: string, accessToken: string, clientToken?: string): Promise<VenueResult | null> {
-    const venueUri = encodeURIComponent(`spotify:venue:${venueId}`);
-    const endpoints = [
-        `concert-view/v2/page?uri=${venueUri}&market=US&locale=en`,
-        `concert-discovery-view/v2/view?uri=${venueUri}`,
-    ];
-    const headers: any = {
-        Authorization: `Bearer ${accessToken}`,
-        Accept: 'application/json',
-        'app-platform': 'WebPlayer',
-        'spotify-app-version': SP_WP_VERSION,
-    };
-    if (clientToken) headers['Client-Token'] = clientToken;
-
-    for (const ep of endpoints) {
-        try {
-            const resp = await axios.get(`https://spclient.wg.spotify.com/${ep}`, { headers, timeout: 10000 });
-            const d = resp.data;
-            console.log(`[atlanta] spclient ${ep.split('?')[0]} ${venueId}: status=${resp.status} keys=${Object.keys(d || {}).join(',')}`);
-
-            const venueName = d?.name || d?.venue?.name || venueId;
-            const items: any[] = d?.concerts?.items || d?.events?.items || [];
-            const shows: Show[] = [];
-            items.forEach((item: any) => {
-                const datetime = item.startDateTime || item.startDate || item.date;
-                const artist = item.title || item.name || item.artists?.[0]?.name;
-                if (datetime && artist) shows.push({ datetime, artist, venue: venueName, venueId });
-            });
-
-            if (shows.length > 0 || venueName !== venueId) return { venueId, venueName, shows };
-        } catch (err: any) {
-            console.log(`[atlanta] spclient ${ep.split('?')[0]} ${venueId}: ${err.response?.status || err.message}`);
-        }
-    }
-    return null;
-}
-
-// Try Spotify's partner GraphQL v2 API (discovered from web player network inspection)
-async function tryPartnerApiV2(venueId: string, tokens?: { accessToken: string; clientToken: string }): Promise<VenueResult | null> {
-    const venueUri = `spotify:venue:${venueId}`;
+// Fetches a single venue via the partner API using tokens captured by Playwright
+async function tryPartnerApiV2(venueId: string, tokens: { accessToken: string; clientToken: string }): Promise<VenueResult | null> {
     const body = {
         operationName: 'venue',
-        variables: { uri: venueUri, offset: 0, limit: 20 },
+        variables: { uri: `spotify:venue:${venueId}`, offset: 0, limit: 20 },
         extensions: {
             persistedQuery: {
                 version: 1,
@@ -331,130 +239,50 @@ async function tryPartnerApiV2(venueId: string, tokens?: { accessToken: string; 
         },
     };
 
-    const baseHeaders = {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-        Origin: 'https://open.spotify.com',
-        Referer: 'https://open.spotify.com/',
-        'app-platform': 'WebPlayer',
-        'spotify-app-version': SP_WP_VERSION,
-    };
-
-    // Try with auth first; if rejected, retry without auth headers
-    const headerSets: Record<string, string>[] = tokens
-        ? [
-            { ...baseHeaders, Authorization: `Bearer ${tokens.accessToken}`, 'Client-Token': tokens.clientToken },
-            { ...baseHeaders },
-          ]
-        : [baseHeaders];
-
-    for (const headers of headerSets) {
-        try {
-            const resp = await axios.post(
-                'https://api-partner.spotify.com/pathfinder/v2/query',
-                body,
-                { headers, timeout: 12000 },
-            );
-
-            const venueData = resp.data?.data?.venue;
-            if (!venueData) {
-                console.log(`[atlanta] partnerV2 ${venueId}: no venue field in response`);
-                return null;
-            }
-
-            const venueName = venueData.name || venueId;
-            const concerts: any[] = venueData.concerts?.items || [];
-            const shows: Show[] = [];
-
-            concerts.forEach((c: any) => {
-                const datetime = c.startDatetime || c.startDateTime || c.date;
-                const artists: any[] = c.artists || [];
-                const artist = artists[0]?.name || c.title || c.name;
-                if (datetime && artist) shows.push({ datetime, artist, venue: venueName, venueId });
-            });
-
-            console.log(`[atlanta] partnerV2 ${venueId}: name="${venueName}" shows=${shows.length}`);
-            return { venueId, venueName, shows };
-        } catch (err: any) {
-            const status = err.response?.status;
-            console.log(`[atlanta] partnerV2 ${venueId}: ${status || err.message}`);
-            // Only retry without auth on auth errors; otherwise stop
-            if (status !== 401 && status !== 403) return null;
-        }
-    }
-    return null;
-}
-
-// Fetch the venue page HTML using a Spotify access token for auth
-async function fetchVenueHtml(venueId: string): Promise<VenueResult | null> {
     try {
-        const resp = await axios.get(
-            `https://open.spotify.com/venue/${venueId}`,
+        const resp = await axios.post(
+            'https://api-partner.spotify.com/pathfinder/v2/query',
+            body,
             {
                 headers: {
-                    'User-Agent':
-                        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                    'Content-Type': 'application/json',
+                    Accept: 'application/json',
+                    Authorization: `Bearer ${tokens.accessToken}`,
+                    'Client-Token': tokens.clientToken,
+                    Origin: 'https://open.spotify.com',
+                    Referer: 'https://open.spotify.com/',
+                    'app-platform': 'WebPlayer',
+                    'spotify-app-version': SP_WP_VERSION,
+                    'User-Agent': UA,
+                    'sec-fetch-site': 'same-site',
+                    'sec-fetch-mode': 'cors',
+                    'sec-fetch-dest': 'empty',
                 },
-                timeout: 20000
-            }
+                timeout: 12000,
+            },
         );
 
-        console.log(
-            `[atlanta] html ${venueId} status=${resp.status}`
-        );
-
-        const $ = cheerio.load(resp.data);
-
-        if (venueId === '0HUd3zYwg7drRMeKHI7hOX') {
-
-            const html = resp.data;
-
-            const match = html.match(/.{0,500}api-partner\.spotify\.com.{0,1500}/s);
-            console.log(match?.[0]);
-
-            const regex = /https?:\/\/[^"']+/g;
-            const urls = html.match(regex) || [];
-            console.log(urls.filter(u => u.includes("spotify")));
-            
-            $('script[src]').each((_, el) => {
-                console.log($(el).attr('src'));
-            });
+        const venueData = resp.data?.data?.venue;
+        if (!venueData) {
+            console.log(`[atlanta] partnerV2 ${venueId}: no venue in response`);
+            return null;
         }
 
-        const venueName =
-            $('[data-testid="entityTitle"] h1').first().text().trim() ||
-            ($('meta[property="og:title"]').attr('content') || '').replace(/\s*\|\s*Spotify\s*$/i, '').trim() ||
-            $('title').text().replace(/\s*\|\s*Spotify\s*$/i, '').replace(/^Spotify\s*$/i, '').trim() ||
-            venueId;
-
-        const shows: Show[] = [];
-        $('a[data-testid="concert-card"]').each((_, card) => {
-            const $card = $(card);
-            const datetime = $card.find('time[datetime]').attr('datetime') || '';
-            const artist = $card.find('h3').text().trim();
-            if (datetime && artist) shows.push({ datetime, artist, venue: venueName, venueId });
-        });
-
-        console.log(`[atlanta] html ${venueId}: name="${venueName}" shows=${shows.length}`);
-        if (shows.length > 0 || venueName !== venueId) return { venueId, venueName, shows };
+        const result = parseVenueApiResponse(venueData, venueId);
+        console.log(`[atlanta] partnerV2 ${venueId}: "${result.venueName}" shows=${result.shows.length}`);
+        return result;
     } catch (err: any) {
-        console.log(`[atlanta] html ${venueId}: ${err.response?.status || err.message}`);
+        console.log(`[atlanta] partnerV2 ${venueId}: ${err.response?.status || err.message}`);
+        return null;
     }
-    return null;
 }
 
 async function getVenueData(
     venueId: string,
-    userAccessToken?: string,
-    tokens?: { clientToken:string; accessToken:string } | null
-) {
-    const partnerResult = await tryPartnerApiV2(venueId, tokens ?? undefined);
-    if (partnerResult) return partnerResult;
-
-    const htmlResult = await fetchVenueHtml(venueId);
-    if (htmlResult) return htmlResult;
-
-    return { venueId, venueName: venueId, shows: [] };
+    tokens: { accessToken: string; clientToken: string }
+): Promise<VenueResult> {
+    const result = await tryPartnerApiV2(venueId, tokens);
+    return result ?? { venueId, venueName: venueId, shows: [] };
 }
 
 app.get('/auto-playlist', function (req, res) {
@@ -475,21 +303,31 @@ app.get('/api/atlanta-shows', async (req, res) => {
         return res.json(atlantaCache.data);
     }
 
-    const userAccessToken = req.cookies.spotifyAccessToken as string | undefined;
-
     try {
         const results: VenueResult[] = [];
-        const tokens = (await getSpotifyWebToken()) ?? undefined;
-        for (let i = 0; i < ATLANTA_VENUE_IDS.length; i += 5) {
-            const batch = ATLANTA_VENUE_IDS.slice(i, i + 5);
-            const batchResults = await Promise.all(batch.map(id => getVenueData(id, userAccessToken, tokens)));
+
+        // Use Playwright on the first venue to get real browser tokens + that venue's data
+        const BOOTSTRAP_VENUE = ATLANTA_VENUE_IDS[0];
+        const { tokens, venueResult: firstResult } = await fetchOneVenueViaPlaywright(BOOTSTRAP_VENUE);
+
+        if (firstResult) results.push(firstResult);
+
+        if (!tokens) {
+            console.error('[atlanta] Playwright failed to capture tokens — no data available');
+            return res.status(500).json({ error: 'Failed to capture Spotify tokens', shows: [], venues: [] });
+        }
+
+        // Fetch all remaining venues with the captured tokens via axios (much faster than more browser pages)
+        const remaining = firstResult ? ATLANTA_VENUE_IDS.slice(1) : ATLANTA_VENUE_IDS;
+        for (let i = 0; i < remaining.length; i += 5) {
+            const batch = remaining.slice(i, i + 5);
+            const batchResults = await Promise.all(batch.map(id => getVenueData(id, tokens)));
             results.push(...batchResults);
         }
 
         const allShows = results.flatMap(r => r.shows);
         allShows.sort((a, b) => new Date(a.datetime).getTime() - new Date(b.datetime).getTime());
 
-        // Always return all venue IDs; use ID as fallback name so the filter works
         const venues = results.map(r => ({
             id: r.venueId,
             name: r.venueName !== r.venueId ? r.venueName : null,
