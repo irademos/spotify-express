@@ -43,10 +43,10 @@ const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,
 
 interface Show {
   datetime: string;
-  artist: string;
+  artists: string[];
   venue: string;
   venueId: string;
-  spotifyArtistId?: string;
+  spotifyArtistIds?: (string | null)[];
 }
 
 interface VenueResult {
@@ -72,9 +72,18 @@ function parseVenueApiResponse(venueData: any, venueId: string): VenueResult {
     const d = c.data || c;
     const datetime = d.startDateIsoString || d.startDate;
     const artistItems: any[] = d.artists?.items || [];
-    const artist = artistItems[0]?.data?.profile?.name || d.title;
+
+    let artists: string[] = artistItems
+      .map((item: any) => item?.data?.profile?.name)
+      .filter(Boolean);
+
+    // Fall back to title, which may be comma-separated artist names
+    if (artists.length === 0 && d.title) {
+      artists = d.title.split(',').map((a: string) => a.trim()).filter(Boolean);
+    }
+
     const venue = d.location?.name || venueName;
-    if (datetime && artist) shows.push({ datetime, artist, venue, venueId });
+    if (datetime && artists.length > 0) shows.push({ datetime, artists, venue, venueId });
   });
 
   return { venueId, venueName, shows };
@@ -335,17 +344,16 @@ async function main() {
   const allShows = results.flatMap((r) => r.shows);
   allShows.sort((a, b) => new Date(a.datetime).getTime() - new Date(b.datetime).getTime());
 
-  // Resolve Spotify artist IDs for all unique artists
-  const uniqueArtistNames = [...new Set(allShows.map((s) => s.artist))];
+  // Resolve Spotify artist IDs for all unique artists across all shows
+  const uniqueArtistNames = [...new Set(allShows.flatMap((s) => s.artists))];
   const searchToken = await getClientCredentialsToken();
   if (searchToken) {
     const artistIdMap = await resolveArtistIds(uniqueArtistNames, searchToken);
     allShows.forEach((show) => {
-      const id = artistIdMap[show.artist];
-      if (id) show.spotifyArtistId = id;
+      show.spotifyArtistIds = show.artists.map((name) => artistIdMap[name] || null);
     });
-    const resolved = allShows.filter((s) => s.spotifyArtistId).length;
-    console.log(`[scraper] ${resolved}/${allShows.length} shows have Spotify artist IDs`);
+    const resolved = allShows.filter((s) => s.spotifyArtistIds?.some((id) => id !== null)).length;
+    console.log(`[scraper] ${resolved}/${allShows.length} shows have at least one Spotify artist ID`);
   }
 
   const venues = results.map((r) => ({

@@ -96,6 +96,22 @@ app.get('/atlanta-shows', function (req, res) {
   res.sendFile(path.join(__dirname, '..', 'components', 'atlantaShows.htm'));
 });
 
+app.post('/api/cache-artist-id', async (req, res) => {
+    const { name, spotifyId } = req.body;
+    if (!name || !spotifyId) return res.status(400).json({ error: 'Missing name or spotifyId' });
+
+    const { error } = await supabase
+        .from('artists')
+        .upsert({ name, spotify_id: spotifyId }, { onConflict: 'name' });
+
+    if (error) {
+        console.error('[cache-artist-id] Supabase error:', error.message);
+        return res.status(500).json({ error: 'Failed to cache artist ID' });
+    }
+
+    res.json({ ok: true });
+});
+
 app.get('/api/atlanta-shows', async (req, res) => {
     try {
         const { data, error } = await supabase
