@@ -1,4 +1,11 @@
 document.addEventListener('DOMContentLoaded', function() {
+    const joinBetaBtn = document.getElementById('joinBeta');
+    if (joinBetaBtn) {
+        joinBetaBtn.addEventListener('click', () => {
+            window.location.href = '/join-beta';
+        });
+    }
+
     fetch('/api/config')
     .then(response => response.json())
     .then(config => {
