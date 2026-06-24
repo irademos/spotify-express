@@ -159,15 +159,21 @@ async function fetchOneVenueViaPlaywright(venueId: string): Promise<{
     }
 
     let pw: any;
+    let chromiumPkg: any;
     try {
-        pw = require('playwright');
+        pw = require('playwright-core');
+        chromiumPkg = require('@sparticuz/chromium');
     } catch {
-        console.error('[playwright] package not available — run: npx playwright install chromium');
+        console.error('[playwright] playwright-core or @sparticuz/chromium not available');
         return { tokens: null, venueResult: null };
     }
 
     console.log(`[playwright] launching browser for venue ${venueId}`);
-    const browser = await pw.chromium.launch({ headless: true });
+    const browser = await pw.chromium.launch({
+        executablePath: await chromiumPkg.executablePath(),
+        args: chromiumPkg.args,
+        headless: true,
+    });
     try {
         const context = await browser.newContext({
             userAgent: UA,
