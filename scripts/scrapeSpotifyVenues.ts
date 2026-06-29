@@ -29,14 +29,13 @@ const ATLANTA_VENUE_IDS = [
   '3z4ioL0RWXvTqRW45P94dz',
   '15ZsLTvybmVMZcQ6ynJ1Wd',
   '0IYFqOtJaNVJpj2sgaRwKo',
-  '6CViqzavVGQk0O9Lukx5Pd',
   '01BO8Btvq2dWdQqvIKjTgU',
   '0uzzDQsAY48qKMeseh3w5N',
-  '4vD9OzCEMMTnxJkAbXuJMM',
-  '0RO73kiZJcbnntnICnPhnP',
-  '4uuxBkCxJkvMLxjnC7x8lW',
-  '5lJumEpnjrp9sZcIukIsBN',
-  '6CViqzavVGQk0O9Lukx5Pd', // Center Stage Theater
+  '4vD9OzCEMMTnxJkAbXuJMM', // Smith's Olde Bar
+  '0RO73kiZJcbnntnICnPhnP', // The Third Door
+  '4uuxBkCxJkvMLxjnC7x8lW', // Altar at the Masquerade
+  '5lJumEpnjrp9sZcIukIsBN', // The Garden Club at Wild Heaven West End
+  '6CViqzavVGQk0O9Lukx5Pd', // Center Stage Theater / Vinyl
   '20mbxU8VsErIgAYlrKxPCQ', // Masquerade - Heaven
   '2Jdti0kwvrcMe9cxuoFjgq', // Lakewood Ampitheater
   '0xoBSGCFuAXXyQd2ETHtTg', // Chastain Park Ampitheater
