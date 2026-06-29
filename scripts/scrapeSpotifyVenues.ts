@@ -13,30 +13,30 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
 const ATLANTA_VENUE_IDS = [
-  '0HUd3zYwg7drRMeKHI7hOX',
-  '56w6Uns7gENOQdP7e99k0S',
-  '3YU5ZqMJOchPbG7DEZEZcF',
-  '6CgzpPmHJFo3nTNyyj1iTH',
-  '2pjdYXAB3zHcuY8yUjAKAE',
-  '4eM6foMcJdCgMYKUQBi1E3',
-  '7EGBn6qZP7ngRny9nQsHB9',
-  '6VgXO4NJiX6ygWDjhDWsL9',
-  '4EriXwnDOckm52Gt46jUx2',
-  '4QJGQpVyqnLgHtolgCp7gL',
-  '1yeWzqcdpKUnHmZMUOa9Ma',
-  '3LEHQ0zFPAkNcm21GC4rE1',
-  '07xImrFVCTJg8SzUu3cxXw',
-  '3z4ioL0RWXvTqRW45P94dz',
-  '15ZsLTvybmVMZcQ6ynJ1Wd',
-  '0IYFqOtJaNVJpj2sgaRwKo',
-  '01BO8Btvq2dWdQqvIKjTgU',
-  '0uzzDQsAY48qKMeseh3w5N',
+  '56w6Uns7gENOQdP7e99k0S', // Buckhead Theatre
+  '3YU5ZqMJOchPbG7DEZEZcF', // 529 Bar EAV
+  '6CgzpPmHJFo3nTNyyj1iTH', // Aisle 5
+  '2pjdYXAB3zHcuY8yUjAKAE', // The EARL
+  '4eM6foMcJdCgMYKUQBi1E3', // Variety Playhouse
+  '7EGBn6qZP7ngRny9nQsHB9', // Coca-Cola Roxy
+  '6VgXO4NJiX6ygWDjhDWsL9', // Fox Theatre
+  '4EriXwnDOckm52Gt46jUx2', // MadLife Stage & Studios
+  '4QJGQpVyqnLgHtolgCp7gL', // eyedrum 
+  '1yeWzqcdpKUnHmZMUOa9Ma', // The Eastern
+  '3LEHQ0zFPAkNcm21GC4rE1', // Eddie's Attic
+  '07xImrFVCTJg8SzUu3cxXw', // Culture Shock
+  '3z4ioL0RWXvTqRW45P94dz', // Tabernacle
+  '15ZsLTvybmVMZcQ6ynJ1Wd', // The Drunken Unicorn
+  '0IYFqOtJaNVJpj2sgaRwKo', // The Loft
+  '01BO8Btvq2dWdQqvIKjTgU', // Terminal West
+  '0uzzDQsAY48qKMeseh3w5N', // Boggs Social & Supply
   '4vD9OzCEMMTnxJkAbXuJMM', // Smith's Olde Bar
   '0RO73kiZJcbnntnICnPhnP', // The Third Door
-  '4uuxBkCxJkvMLxjnC7x8lW', // Altar at the Masquerade
   '5lJumEpnjrp9sZcIukIsBN', // The Garden Club at Wild Heaven West End
   '6CViqzavVGQk0O9Lukx5Pd', // Center Stage Theater / Vinyl
+  '4uuxBkCxJkvMLxjnC7x8lW', // Masquerade - Altar
   '20mbxU8VsErIgAYlrKxPCQ', // Masquerade - Heaven
+  '0HUd3zYwg7drRMeKHI7hOX', // Masquerade - Purgatory
   '2Jdti0kwvrcMe9cxuoFjgq', // Lakewood Ampitheater
   '0xoBSGCFuAXXyQd2ETHtTg', // Chastain Park Ampitheater
   '06QO7xdSdeHQxiyVaUXKlZ', // State Farm Arena
