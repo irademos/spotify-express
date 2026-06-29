@@ -36,6 +36,22 @@ const ATLANTA_VENUE_IDS = [
   '0RO73kiZJcbnntnICnPhnP',
   '4uuxBkCxJkvMLxjnC7x8lW',
   '5lJumEpnjrp9sZcIukIsBN',
+  '6CViqzavVGQk0O9Lukx5Pd', // Center Stage Theater
+  '20mbxU8VsErIgAYlrKxPCQ', // Masquerade - Heaven
+  '2Jdti0kwvrcMe9cxuoFjgq', // Lakewood Ampitheater
+  '0xoBSGCFuAXXyQd2ETHtTg', // Chastain Park Ampitheater
+  '06QO7xdSdeHQxiyVaUXKlZ', // State Farm Arena
+  '79u4ZLSiG3YNHbMVMTDiWe', // Believe Music Hall
+  '6c4bbdh0a10lPfoGvCVXcR', // District Atlanta
+  '5gbgLdHRsuN9DR75eunIoT', // Star Bar
+  '0Ypxi7KUWEcetzOr6jbR9U', // Northside Tavern
+  '45r6C6zeL3PQ0fBteQDfbD', // Blind Willies
+  '5sVth0DdbjgvsPjyHMyq6X', // Atlanta Symphony Hall
+  '3uZPorjHCS6P60zebLFYFK', // Ameris Bank Ampitheatre
+  '4MH5KNT29dI9jk5wesLf8m', // Gas South Arena
+  '6JLAUDO8YiWIw7PZGLD5rU', // Cobb Energy Performing Arts Centre
+  '3iX6U4lMbb9dyJfebip6PF', // Mable House Barnes Ampitheatre
+  '1ojghBZoqCZgdqUAvofGMX', // From the Earth Brewing
 ];
 
 const SP_WP_VERSION = '1.2.93.577.g601a69db';
