@@ -64,6 +64,13 @@ document.addEventListener('DOMContentLoaded', function () {
             btn.textContent = active ? '⏸' : '▶';
             btn.title = active ? 'Pause' : 'Play';
         });
+
+        const activeShowKey = currentPlayingKey && isPlaying
+            ? currentPlayingKey.slice(0, currentPlayingKey.indexOf('::artist::'))
+            : null;
+        document.querySelectorAll('.show-item').forEach(li => {
+            li.classList.toggle('show-item--playing', li.dataset.showKey === activeShowKey);
+        });
     }
 
     function playNextArtist() {
@@ -344,6 +351,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
             const li = document.createElement('li');
             li.className = 'show-item';
+            li.dataset.showKey = showKey(show);
 
             const dateDiv = document.createElement('div');
             dateDiv.className = 'show-date-cell';
