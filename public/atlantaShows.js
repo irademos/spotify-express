@@ -176,6 +176,29 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
+    // Image popup
+    const imgPopupOverlay = document.getElementById('imgPopupOverlay');
+    const imgPopupImg = document.getElementById('imgPopupImg');
+
+    function openImgPopup(src, alt) {
+        imgPopupImg.src = src;
+        imgPopupImg.alt = alt;
+        imgPopupOverlay.classList.add('active');
+    }
+
+    function closeImgPopup() {
+        imgPopupOverlay.classList.remove('active');
+        imgPopupImg.src = '';
+    }
+
+    document.getElementById('imgPopupClose').addEventListener('click', closeImgPopup);
+    imgPopupOverlay.addEventListener('click', (e) => {
+        if (e.target === imgPopupOverlay) closeImgPopup();
+    });
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') closeImgPopup();
+    });
+
     document.getElementById('backBtn').addEventListener('click', () => {
         window.location.href = '/dashboard';
     });
@@ -331,6 +354,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 avatar.src = show.firstArtistAvatarUrl;
                 avatar.alt = show.artists[0] || '';
                 avatar.loading = 'lazy';
+                avatar.addEventListener('click', () => openImgPopup(show.firstArtistAvatarUrl, show.artists[0] || ''));
                 dateDiv.appendChild(avatar);
             }
 
