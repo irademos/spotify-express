@@ -51,6 +51,7 @@ const ATLANTA_VENUE_IDS = [
   '6JLAUDO8YiWIw7PZGLD5rU', // Cobb Energy Performing Arts Centre
   '3iX6U4lMbb9dyJfebip6PF', // Mable House Barnes Ampitheatre
   '1ojghBZoqCZgdqUAvofGMX', // From the Earth Brewing
+  '2boxN5EsZK9QcT7cB8daDO', // Avon Theater
 ];
 
 const SP_WP_VERSION = '1.2.93.577.g601a69db';
