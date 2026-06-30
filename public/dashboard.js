@@ -4,6 +4,14 @@
 document.addEventListener('DOMContentLoaded', function() {
     let player = null;
 
+    fetch('/api/me')
+    .then(response => response.json())
+    .then(data => {
+        const name = data.display_name || data.id || '';
+        document.getElementById('userDisplayName').textContent = name;
+    })
+    .catch(error => console.error('Error fetching user:', error));
+
     fetch('/api/config')
     .then(response => response.json())
     .then(config => {
