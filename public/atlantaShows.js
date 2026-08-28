@@ -3,6 +3,241 @@ document.addEventListener('DOMContentLoaded', function () {
     let venues = [];
     let selectedVenueIds = new Set();
 
+    // ── City / scraping venue config ────────────────────────────────────────
+    let cityVenueData = []; // [{city, venues:[{id,name}]}]
+    let selectedCity = 'Atlanta';
+
+    function extractVenueId(raw) {
+        raw = raw.trim();
+        // Accept full Spotify URL: https://open.spotify.com/venue/<id>
+        const urlMatch = raw.match(/open\.spotify\.com\/venue\/([A-Za-z0-9]+)/);
+        if (urlMatch) return urlMatch[1];
+        // Accept spotify:venue:<id>
+        const uriMatch = raw.match(/spotify:venue:([A-Za-z0-9]+)/);
+        if (uriMatch) return uriMatch[1];
+        // Accept plain ID (alphanumeric, ~22 chars)
+        if (/^[A-Za-z0-9]{10,30}$/.test(raw)) return raw;
+        return null;
+    }
+
+    function currentCityVenues() {
+        const entry = cityVenueData.find(e => e.city === selectedCity);
+        return entry ? entry.venues : [];
+    }
+
+    function renderScrapeVenues() {
+        const list = document.getElementById('scrapeVenueList');
+        const countEl = document.getElementById('scrapeVenueCount');
+        const labelEl = document.getElementById('scrapeLabel');
+        const cityVenues = currentCityVenues();
+
+        labelEl.textContent = cityVenues.length === 0
+            ? 'No venues configured'
+            : `${cityVenues.length} venue${cityVenues.length !== 1 ? 's' : ''}`;
+
+        list.innerHTML = '';
+        if (cityVenues.length === 0) {
+            list.innerHTML = '<div style="padding:10px 14px;font-size:13px;color:#888;">No venues — use + to add one</div>';
+            countEl.textContent = '';
+            return;
+        }
+
+        const sorted = [...cityVenues].sort((a, b) =>
+            (a.name || a.id).localeCompare(b.name || b.id));
+
+        sorted.forEach(v => {
+            const row = document.createElement('div');
+            row.className = 'scrape-venue-item';
+
+            const name = document.createElement('span');
+            name.className = 'scrape-venue-name';
+            name.textContent = v.name || '(unnamed)';
+            name.title = v.name || '';
+
+            const idSpan = document.createElement('span');
+            idSpan.className = 'scrape-venue-id';
+            idSpan.textContent = v.id;
+            idSpan.title = v.id;
+
+            const removeBtn = document.createElement('button');
+            removeBtn.className = 'remove-venue-btn';
+            removeBtn.textContent = '×';
+            removeBtn.title = 'Remove venue';
+            removeBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                removeVenueFromCity(selectedCity, v.id);
+            });
+
+            row.appendChild(name);
+            row.appendChild(idSpan);
+            row.appendChild(removeBtn);
+            list.appendChild(row);
+        });
+
+        countEl.textContent = `${cityVenues.length} venue${cityVenues.length !== 1 ? 's' : ''} configured for scraping`;
+    }
+
+    function populateCitySelect() {
+        const sel = document.getElementById('citySelect');
+        const currentVal = sel.value || selectedCity;
+        sel.innerHTML = '';
+        cityVenueData.forEach(e => {
+            const opt = document.createElement('option');
+            opt.value = e.city;
+            opt.textContent = e.city;
+            sel.appendChild(opt);
+        });
+        if (cityVenueData.find(e => e.city === currentVal)) {
+            sel.value = currentVal;
+        } else if (cityVenueData.length > 0) {
+            sel.value = cityVenueData[0].city;
+        }
+        selectedCity = sel.value;
+    }
+
+    async function loadCityVenues() {
+        try {
+            const res = await fetch('/api/city-venues');
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            cityVenueData = await res.json();
+            populateCitySelect();
+            renderScrapeVenues();
+        } catch (err) {
+            console.error('Failed to load city venues:', err);
+            document.getElementById('scrapeLabel').textContent = 'Error loading';
+        }
+    }
+
+    async function removeVenueFromCity(city, venueId) {
+        try {
+            const res = await fetch(`/api/city-venues/${encodeURIComponent(city)}/venues/${encodeURIComponent(venueId)}`, {
+                method: 'DELETE'
+            });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const entry = cityVenueData.find(e => e.city === city);
+            if (entry) entry.venues = entry.venues.filter(v => v.id !== venueId);
+            renderScrapeVenues();
+        } catch (err) {
+            alert('Failed to remove venue: ' + err.message);
+        }
+    }
+
+    // City select
+    document.getElementById('citySelect').addEventListener('change', function () {
+        selectedCity = this.value;
+        renderScrapeVenues();
+    });
+
+    // Scrape dropdown open/close
+    const scrapeTrigger = document.getElementById('scrapeTrigger');
+    const scrapePanel = document.getElementById('scrapePanel');
+    const scrapeWrapper = document.getElementById('scrapeDropdownWrapper');
+
+    scrapeTrigger.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isOpen = scrapePanel.classList.toggle('open');
+        scrapeTrigger.classList.toggle('open', isOpen);
+    });
+    scrapePanel.addEventListener('click', (e) => e.stopPropagation());
+    scrapeWrapper.addEventListener('click', (e) => e.stopPropagation());
+
+    // Add city
+    const addCityBtn = document.getElementById('addCityBtn');
+    const addCityInline = document.getElementById('addCityInline');
+    const addCityInput = document.getElementById('addCityInput');
+    const addCityConfirm = document.getElementById('addCityConfirm');
+    const addCityCancel = document.getElementById('addCityCancel');
+
+    addCityBtn.addEventListener('click', () => {
+        addCityInline.classList.toggle('visible');
+        if (addCityInline.classList.contains('visible')) addCityInput.focus();
+    });
+
+    addCityCancel.addEventListener('click', () => {
+        addCityInline.classList.remove('visible');
+        addCityInput.value = '';
+    });
+
+    async function submitAddCity() {
+        const city = addCityInput.value.trim();
+        if (!city) return;
+        try {
+            const res = await fetch('/api/city-venues', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ city })
+            });
+            if (res.status === 409) {
+                alert(`"${city}" already exists.`);
+                return;
+            }
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            cityVenueData.push({ city, venues: [] });
+            cityVenueData.sort((a, b) => a.city.localeCompare(b.city));
+            addCityInput.value = '';
+            addCityInline.classList.remove('visible');
+            populateCitySelect();
+            document.getElementById('citySelect').value = city;
+            selectedCity = city;
+            renderScrapeVenues();
+        } catch (err) {
+            alert('Failed to add city: ' + err.message);
+        }
+    }
+
+    addCityConfirm.addEventListener('click', submitAddCity);
+    addCityInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') submitAddCity(); });
+
+    // Add venue
+    const addVenueBtn = document.getElementById('addVenueBtn');
+    const addVenueInline = document.getElementById('addVenueInline');
+    const addVenueInput = document.getElementById('addVenueInput');
+    const addVenueConfirm = document.getElementById('addVenueConfirm');
+    const addVenueCancel = document.getElementById('addVenueCancel');
+
+    addVenueBtn.addEventListener('click', () => {
+        addVenueInline.classList.toggle('visible');
+        if (addVenueInline.classList.contains('visible')) addVenueInput.focus();
+    });
+
+    addVenueCancel.addEventListener('click', () => {
+        addVenueInline.classList.remove('visible');
+        addVenueInput.value = '';
+    });
+
+    async function submitAddVenue() {
+        const raw = addVenueInput.value.trim();
+        const venueId = extractVenueId(raw);
+        if (!venueId) {
+            alert('Enter a valid Spotify venue ID or URL (e.g. https://open.spotify.com/venue/...). ');
+            return;
+        }
+        try {
+            const res = await fetch(`/api/city-venues/${encodeURIComponent(selectedCity)}/venues`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ venueId })
+            });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const json = await res.json();
+            if (!json.already) {
+                const entry = cityVenueData.find(e => e.city === selectedCity);
+                if (entry) entry.venues.push({ id: venueId, name: null });
+            }
+            addVenueInput.value = '';
+            addVenueInline.classList.remove('visible');
+            renderScrapeVenues();
+        } catch (err) {
+            alert('Failed to add venue: ' + err.message);
+        }
+    }
+
+    addVenueConfirm.addEventListener('click', submitAddVenue);
+    addVenueInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') submitAddVenue(); });
+
+    loadCityVenues();
+    // ────────────────────────────────────────────────────────────────────────
+
     // Spotify player state
     let player = null;
     let spotifyDeviceId = null;
@@ -223,6 +458,8 @@ document.addEventListener('DOMContentLoaded', function () {
     document.addEventListener('click', () => {
         panel.classList.remove('open');
         trigger.classList.remove('open');
+        scrapePanel.classList.remove('open');
+        scrapeTrigger.classList.remove('open');
     });
 
     panel.addEventListener('click', (e) => e.stopPropagation());
