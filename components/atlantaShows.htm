@@ -359,10 +359,156 @@
         }
         .img-popup-close:hover { background: #eee; }
 
+        /* City / venue config section */
+        .config-section {
+            border: 1px solid #e8e8e8;
+            border-radius: 6px;
+            padding: 14px 16px;
+            margin-bottom: 20px;
+            background: #fafafa;
+        }
+
+        .config-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .config-row + .config-row {
+            margin-top: 10px;
+        }
+
+        .config-label {
+            font-size: 13px;
+            font-weight: 600;
+            color: #555;
+            white-space: nowrap;
+            min-width: 100px;
+        }
+
+        .city-select {
+            font-size: 14px;
+            padding: 7px 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            background: white;
+            color: #333;
+            cursor: pointer;
+            min-width: 160px;
+        }
+        .city-select:focus { outline: 2px solid #1db954; outline-offset: 1px; }
+
+        .add-btn {
+            width: 30px;
+            height: 30px;
+            min-width: 30px;
+            padding: 0;
+            font-size: 20px;
+            line-height: 1;
+            border-radius: 50%;
+            background: #1db954;
+            color: white;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .add-btn:hover { background: #158f3f; }
+
+        .inline-add {
+            display: none;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+        .inline-add.visible { display: flex; }
+
+        .inline-add input {
+            font-size: 13px;
+            padding: 5px 9px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            min-width: 200px;
+            outline: none;
+        }
+        .inline-add input:focus { border-color: #1db954; }
+
+        .inline-confirm-btn {
+            background: #1db954;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 5px 10px;
+            font-size: 13px;
+            cursor: pointer;
+        }
+        .inline-confirm-btn:hover { background: #158f3f; }
+
+        .inline-cancel-btn {
+            background: none;
+            color: #888;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            padding: 5px 10px;
+            font-size: 13px;
+            cursor: pointer;
+        }
+        .inline-cancel-btn:hover { background: #f0f0f0; }
+
+        /* Scrape venue list panel */
+        .scrape-venue-item {
+            display: flex;
+            align-items: center;
+            padding: 8px 14px;
+            gap: 8px;
+            font-size: 13px;
+            color: #333;
+        }
+        .scrape-venue-item:hover { background: #f7f7f7; }
+
+        .scrape-venue-name {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .scrape-venue-id {
+            font-size: 11px;
+            color: #aaa;
+            font-family: monospace;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            max-width: 140px;
+        }
+
+        .remove-venue-btn {
+            background: none;
+            border: none;
+            color: #bbb;
+            cursor: pointer;
+            font-size: 16px;
+            line-height: 1;
+            padding: 0 2px;
+            flex-shrink: 0;
+        }
+        .remove-venue-btn:hover { color: #c00; }
+
+        .scrape-venue-count {
+            font-size: 13px;
+            color: #888;
+            padding: 6px 14px;
+            border-top: 1px solid #eee;
+        }
+
         @media (max-width: 560px) {
             .show-item { grid-template-columns: 120px 1fr; }
             .show-venue-name { text-align: left; grid-column: 2; margin-top: -8px; }
             .artist-avatar { width: 32px; height: 32px; }
+            .config-label { min-width: 80px; }
         }
     </style>
 </head>
@@ -373,8 +519,45 @@
             <h1>Atlanta Shows</h1>
         </div>
 
+        <!-- City + scraping venue config -->
+        <div class="config-section">
+            <div class="config-row">
+                <span class="config-label">City:</span>
+                <select class="city-select" id="citySelect">
+                    <option value="Atlanta">Atlanta</option>
+                </select>
+                <button class="add-btn" id="addCityBtn" title="Add new city">+</button>
+                <div class="inline-add" id="addCityInline">
+                    <input type="text" id="addCityInput" placeholder="City name" maxlength="80">
+                    <button class="inline-confirm-btn" id="addCityConfirm">Add</button>
+                    <button class="inline-cancel-btn" id="addCityCancel">Cancel</button>
+                </div>
+            </div>
+            <div class="config-row">
+                <span class="config-label">Scrape Venues:</span>
+                <div class="dropdown-wrapper" id="scrapeDropdownWrapper">
+                    <button class="dropdown-trigger" id="scrapeTrigger">
+                        <span id="scrapeLabel">Loading&hellip;</span>
+                        <span class="arrow">&#9660;</span>
+                    </button>
+                    <div class="dropdown-panel" id="scrapePanel">
+                        <div id="scrapeVenueList"></div>
+                        <div class="scrape-venue-count" id="scrapeVenueCount"></div>
+                    </div>
+                </div>
+                <button class="add-btn" id="addVenueBtn" title="Add venue to this city">+</button>
+                <div class="inline-add" id="addVenueInline">
+                    <input type="text" id="addVenueInput" placeholder="Venue ID or Spotify URL">
+                    <button class="inline-confirm-btn" id="addVenueConfirm">Add</button>
+                    <button class="inline-cancel-btn" id="addVenueCancel">Cancel</button>
+                </div>
+                <button id="triggerScrapeBtn" title="Run the scraper GitHub Action now" style="margin-left:8px;background:#1DB954;font-size:13px;padding:6px 12px;">&#9654; Scrape Now</button>
+                <span id="triggerScrapeStatus" style="font-size:12px;color:#555;margin-left:6px;"></span>
+            </div>
+        </div>
+
         <div class="filter-section">
-            <span class="filter-label">Venues:</span>
+            <span class="filter-label">Filter:</span>
             <div class="dropdown-wrapper" id="dropdownWrapper">
                 <button class="dropdown-trigger" id="dropdownTrigger">
                     <span id="dropdownLabel">All Venues</span>
