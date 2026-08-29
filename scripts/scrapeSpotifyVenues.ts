@@ -354,10 +354,34 @@ async function resolveArtistIds(
   return artistIdMap;
 }
 
+async function loadVenueIds(): Promise<string[]> {
+  const { data, error } = await supabase
+    .from('city_venues')
+    .select('venues')
+    .eq('city', 'Atlanta')
+    .single();
+
+  if (error || !data) {
+    console.log('[scraper] city_venues lookup failed, falling back to hardcoded list:', error?.message);
+    return ATLANTA_VENUE_IDS;
+  }
+
+  const ids: string[] = ((data as any).venues as any[] || []).map((v: any) => v.id).filter(Boolean);
+  if (ids.length === 0) {
+    console.log('[scraper] city_venues Atlanta row is empty, falling back to hardcoded list');
+    return ATLANTA_VENUE_IDS;
+  }
+
+  console.log(`[scraper] Loaded ${ids.length} venue IDs from city_venues`);
+  return ids;
+}
+
 async function main() {
   console.log('[scraper] Starting Atlanta venues scrape...');
 
-  const BOOTSTRAP_VENUE = ATLANTA_VENUE_IDS[0];
+  const venueIds = await loadVenueIds();
+
+  const BOOTSTRAP_VENUE = venueIds[0];
   const { tokens, venueResult: firstResult } = await captureTokensViaPlaywright(BOOTSTRAP_VENUE);
 
   if (!tokens) {
@@ -368,7 +392,7 @@ async function main() {
   const results: VenueResult[] = [];
   if (firstResult) results.push(firstResult);
 
-  const remaining = firstResult ? ATLANTA_VENUE_IDS.slice(1) : ATLANTA_VENUE_IDS;
+  const remaining = firstResult ? venueIds.slice(1) : venueIds;
   for (let i = 0; i < remaining.length; i += 5) {
     const batch = remaining.slice(i, i + 5);
     const batchResults = await Promise.all(
