@@ -354,45 +354,44 @@ async function resolveArtistIds(
   return artistIdMap;
 }
 
-async function loadVenueIds(): Promise<string[]> {
-  const { data, error } = await supabase
-    .from('city_venues')
-    .select('venues')
-    .eq('city', 'Atlanta')
-    .single();
+async function loadAllCityVenues(): Promise<{ city: string; venueIds: string[] }[]> {
+  const { data, error } = await supabase.from('city_venues').select('city, venues').order('city');
 
-  if (error || !data) {
-    console.log('[scraper] city_venues lookup failed, falling back to hardcoded list:', error?.message);
-    return ATLANTA_VENUE_IDS;
+  if (error || !data || (data as any[]).length === 0) {
+    console.log('[scraper] city_venues lookup failed or empty, falling back to hardcoded Atlanta list:', error?.message);
+    return [{ city: 'Atlanta', venueIds: ATLANTA_VENUE_IDS }];
   }
 
-  const ids: string[] = ((data as any).venues as any[] || []).map((v: any) => v.id).filter(Boolean);
-  if (ids.length === 0) {
-    console.log('[scraper] city_venues Atlanta row is empty, falling back to hardcoded list');
-    return ATLANTA_VENUE_IDS;
+  const cities = (data as any[])
+    .map((row: any) => {
+      const ids: string[] = (row.venues as any[] || []).map((v: any) => v.id).filter(Boolean);
+      return { city: row.city as string, venueIds: ids };
+    })
+    .filter(c => c.venueIds.length > 0);
+
+  if (cities.length === 0) {
+    console.log('[scraper] All city_venues rows are empty, falling back to hardcoded Atlanta list');
+    return [{ city: 'Atlanta', venueIds: ATLANTA_VENUE_IDS }];
   }
 
-  console.log(`[scraper] Loaded ${ids.length} venue IDs from city_venues`);
-  return ids;
+  cities.forEach(c => console.log(`[scraper] ${c.city}: ${c.venueIds.length} venues`));
+  return cities;
 }
 
-async function main() {
-  console.log('[scraper] Starting Atlanta venues scrape...');
-
-  const venueIds = await loadVenueIds();
-
-  const BOOTSTRAP_VENUE = venueIds[0];
-  const { tokens, venueResult: firstResult } = await captureTokensViaPlaywright(BOOTSTRAP_VENUE);
-
-  if (!tokens) {
-    console.error('[scraper] Failed to capture Spotify tokens via Playwright');
-    process.exit(1);
-  }
+async function scrapeCity(
+  city: string,
+  venueIds: string[],
+  tokens: { accessToken: string; clientToken: string },
+  bootstrapResult: VenueResult | null,
+  bootstrapVenueId: string,
+  searchToken: string | null
+): Promise<void> {
+  console.log(`\n[scraper] ── ${city} ──`);
 
   const results: VenueResult[] = [];
-  if (firstResult) results.push(firstResult);
+  if (bootstrapResult && venueIds[0] === bootstrapVenueId) results.push(bootstrapResult);
 
-  const remaining = firstResult ? venueIds.slice(1) : venueIds;
+  const remaining = results.length > 0 ? venueIds.slice(1) : venueIds;
   for (let i = 0; i < remaining.length; i += 5) {
     const batch = remaining.slice(i, i + 5);
     const batchResults = await Promise.all(
@@ -407,7 +406,6 @@ async function main() {
   const allShows = results.flatMap((r) => r.shows);
   allShows.sort((a, b) => new Date(a.datetime).getTime() - new Date(b.datetime).getTime());
 
-  // Collect artist IDs already embedded in shows from the partner API URIs
   const artistIdFromApi = new Map<string, string>();
   allShows.forEach((show) => {
     show.artists.forEach((name, idx) => {
@@ -416,35 +414,31 @@ async function main() {
     });
   });
 
-  // Upsert partner-API-sourced artist IDs into Supabase
   if (artistIdFromApi.size > 0) {
     const toUpsert = Array.from(artistIdFromApi.entries()).map(([name, spotify_id]) => ({ name, spotify_id }));
     const { error: upsertErr } = await supabase.from('artists').upsert(toUpsert, { onConflict: 'name' });
-    if (upsertErr) {
-      console.log('[scraper] Warning: could not upsert API artist IDs:', upsertErr.message);
-    } else {
-      console.log(`[scraper] Upserted ${toUpsert.length} artists from partner API`);
+    if (upsertErr) console.log('[scraper] Warning: could not upsert API artist IDs:', upsertErr.message);
+    else console.log(`[scraper] Upserted ${toUpsert.length} artists from partner API`);
+  }
+
+  if (searchToken) {
+    const allArtistNames = [...new Set(allShows.flatMap((s) => s.artists))];
+    const stillMissing = allArtistNames.filter(name => !artistIdFromApi.has(name));
+    if (stillMissing.length > 0) {
+      const artistIdMap = await resolveArtistIds(stillMissing, searchToken);
+      allShows.forEach((show) => {
+        show.artists.forEach((name, idx) => {
+          if (!show.spotifyArtistIds?.[idx] && artistIdMap[name]) {
+            if (!show.spotifyArtistIds) show.spotifyArtistIds = show.artists.map(() => null);
+            show.spotifyArtistIds[idx] = artistIdMap[name];
+          }
+        });
+      });
     }
   }
 
-  // For artists whose ID wasn't in the partner API response (title-fallback cases), search Spotify
-  const allArtistNames = [...new Set(allShows.flatMap((s) => s.artists))];
-  const stillMissing = allArtistNames.filter(name => !artistIdFromApi.has(name));
-  const searchToken = await getClientCredentialsToken();
-  if (searchToken && stillMissing.length > 0) {
-    const artistIdMap = await resolveArtistIds(stillMissing, searchToken);
-    allShows.forEach((show) => {
-      show.artists.forEach((name, idx) => {
-        if (!show.spotifyArtistIds?.[idx] && artistIdMap[name]) {
-          if (!show.spotifyArtistIds) show.spotifyArtistIds = show.artists.map(() => null);
-          show.spotifyArtistIds[idx] = artistIdMap[name];
-        }
-      });
-    });
-  }
-
   const resolved = allShows.filter((s) => s.spotifyArtistIds?.some((id) => id !== null)).length;
-  console.log(`[scraper] ${resolved}/${allShows.length} shows have at least one Spotify artist ID`);
+  console.log(`[scraper] ${city}: ${resolved}/${allShows.length} shows have at least one Spotify artist ID`);
 
   const venues = results.map((r) => ({
     id: r.venueId,
@@ -453,16 +447,45 @@ async function main() {
 
   const payload = { shows: allShows, venues, scrapedAt: new Date().toISOString() };
 
-  const { error } = await supabase
-    .from('atlanta_shows_cache')
-    .upsert({ id: 1, data: payload, updated_at: new Date().toISOString() });
+  // Write to generic shows_cache keyed by city
+  const { error: cacheErr } = await supabase
+    .from('shows_cache')
+    .upsert({ city, data: payload, updated_at: new Date().toISOString() }, { onConflict: 'city' });
 
-  if (error) {
-    console.error('[scraper] Supabase upsert error:', error.message);
+  if (cacheErr) console.error(`[scraper] shows_cache upsert error for ${city}:`, cacheErr.message);
+  else console.log(`[scraper] ${city}: saved ${allShows.length} shows across ${results.length} venues`);
+
+  // Also keep atlanta_shows_cache in sync for backward compatibility
+  if (city === 'Atlanta') {
+    const { error: legacyErr } = await supabase
+      .from('atlanta_shows_cache')
+      .upsert({ id: 1, data: payload, updated_at: new Date().toISOString() });
+    if (legacyErr) console.error('[scraper] atlanta_shows_cache upsert error:', legacyErr.message);
+  }
+}
+
+async function main() {
+  console.log('[scraper] Starting multi-city venues scrape...');
+
+  const cities = await loadAllCityVenues();
+
+  // Use the first venue of the first city to bootstrap Playwright tokens
+  const firstCity = cities[0];
+  const BOOTSTRAP_VENUE = firstCity.venueIds[0];
+  const { tokens, venueResult: bootstrapResult } = await captureTokensViaPlaywright(BOOTSTRAP_VENUE);
+
+  if (!tokens) {
+    console.error('[scraper] Failed to capture Spotify tokens via Playwright');
     process.exit(1);
   }
 
-  console.log(`[scraper] Done — ${allShows.length} shows across ${results.length} venues`);
+  const searchToken = await getClientCredentialsToken();
+
+  for (const { city, venueIds } of cities) {
+    await scrapeCity(city, venueIds, tokens, bootstrapResult, BOOTSTRAP_VENUE, searchToken);
+  }
+
+  console.log('\n[scraper] All cities done.');
 }
 
 main().catch((err) => {

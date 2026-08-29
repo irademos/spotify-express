@@ -120,19 +120,49 @@ app.post('/api/cache-artist-id', async (req, res) => {
     res.json({ ok: true });
 });
 
-app.get('/api/atlanta-shows', async (req, res) => {
+app.get('/api/shows/:city', async (req, res) => {
+    const city = decodeURIComponent(req.params.city);
     try {
         const { data, error } = await supabase
-            .from('atlanta_shows_cache')
+            .from('shows_cache')
             .select('data, updated_at')
-            .eq('id', 1)
+            .eq('city', city)
             .single();
 
         if (error || !data) {
             return res.status(503).json({ error: 'No cached data available', shows: [], venues: [] });
         }
 
-        res.json(data.data);
+        res.json((data as any).data);
+    } catch (err: any) {
+        console.error(`[shows/${city}] error reading from Supabase:`, err.message);
+        res.status(500).json({ error: 'Failed to read cached shows', shows: [], venues: [] });
+    }
+});
+
+// Legacy route — reads from shows_cache for Atlanta (falls back to atlanta_shows_cache)
+app.get('/api/atlanta-shows', async (req, res) => {
+    try {
+        const { data, error } = await supabase
+            .from('shows_cache')
+            .select('data, updated_at')
+            .eq('city', 'Atlanta')
+            .single();
+
+        if (!error && data) return res.json((data as any).data);
+
+        // fallback to old table
+        const { data: legacy, error: legacyErr } = await supabase
+            .from('atlanta_shows_cache')
+            .select('data, updated_at')
+            .eq('id', 1)
+            .single();
+
+        if (legacyErr || !legacy) {
+            return res.status(503).json({ error: 'No cached data available', shows: [], venues: [] });
+        }
+
+        res.json((legacy as any).data);
     } catch (err: any) {
         console.error('[atlanta] error reading from Supabase:', err.message);
         res.status(500).json({ error: 'Failed to read cached shows', shows: [], venues: [] });
