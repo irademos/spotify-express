@@ -243,6 +243,29 @@ app.delete('/api/city-venues/:city/venues/:venueId', async (req, res) => {
     res.json({ ok: true });
 });
 
+app.post('/api/trigger-scrape', async (req, res) => {
+    const token = process.env.GITHUB_TOKEN;
+    if (!token) return res.status(500).json({ error: 'GITHUB_TOKEN not configured' });
+
+    try {
+        await axios.post(
+            'https://api.github.com/repos/irademos/spotify-express/actions/workflows/atlanta-shows.yml/dispatches',
+            { ref: 'main' },
+            {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Accept': 'application/vnd.github+json',
+                    'X-GitHub-Api-Version': '2022-11-28'
+                }
+            }
+        );
+        res.json({ ok: true });
+    } catch (err: any) {
+        const msg = err.response?.data?.message || err.message;
+        res.status(500).json({ error: msg });
+    }
+});
+
 // ────────────────────────────────────────────────────────────────────────────
 
 app.get('/api/scape-html-only', async (req, res) => {

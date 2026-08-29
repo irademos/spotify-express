@@ -1,5 +1,6 @@
 document.addEventListener('DOMContentLoaded', function () {
     let allShows = [];
+    let allApiVenues = [];
     let venues = [];
     let selectedVenueIds = new Set();
 
@@ -122,10 +123,42 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
+    function rebuildVenuesForCity() {
+        const cityVenues = currentCityVenues();
+        if (cityVenues.length > 0) {
+            // Use cityVenueData names, falling back to API-returned names
+            const apiVenueById = new Map(allApiVenues.map(v => [v.id, v]));
+            venues = cityVenues
+                .map(v => {
+                    const api = apiVenueById.get(v.id);
+                    const name = v.name || api?.name || null;
+                    return name ? { id: v.id, name, displayName: name } : null;
+                })
+                .filter(Boolean)
+                .sort((a, b) => a.displayName.localeCompare(b.displayName));
+
+            if (venues.length === 0) {
+                venues = cityVenues.map((v, i) => ({
+                    id: v.id,
+                    name: v.id,
+                    displayName: `Venue ${i + 1}`
+                }));
+            }
+        } else {
+            venues = [...allApiVenues];
+        }
+
+        selectedVenueIds = new Set(venues.map(v => v.id));
+        buildVenueCheckboxes();
+        updateDropdownLabel();
+        renderShows();
+    }
+
     // City select
     document.getElementById('citySelect').addEventListener('change', function () {
         selectedCity = this.value;
         renderScrapeVenues();
+        rebuildVenuesForCity();
     });
 
     // Scrape dropdown open/close
@@ -236,6 +269,33 @@ document.addEventListener('DOMContentLoaded', function () {
     addVenueInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') submitAddVenue(); });
 
     loadCityVenues();
+
+    // Trigger scrape GitHub Action
+    document.getElementById('triggerScrapeBtn').addEventListener('click', async function () {
+        const btn = this;
+        const status = document.getElementById('triggerScrapeStatus');
+        btn.disabled = true;
+        btn.textContent = 'Triggering…';
+        status.textContent = '';
+        try {
+            const res = await fetch('/api/trigger-scrape', { method: 'POST' });
+            const json = await res.json();
+            if (res.ok) {
+                status.textContent = 'Scrape triggered! Check GitHub Actions for progress.';
+                status.style.color = '#1DB954';
+            } else {
+                status.textContent = json.error || 'Failed to trigger.';
+                status.style.color = '#c00';
+            }
+        } catch (err) {
+            status.textContent = 'Network error: ' + err.message;
+            status.style.color = '#c00';
+        } finally {
+            btn.disabled = false;
+            btn.textContent = '▶ Scrape Now';
+        }
+    });
+
     // ────────────────────────────────────────────────────────────────────────
 
     // Spotify player state
@@ -714,26 +774,23 @@ document.addEventListener('DOMContentLoaded', function () {
                     return show;
                 });
 
-                // Build venues list; filter out entries with no name (name===null means unknown)
+                // Build full API venue list (used for cross-referencing names)
                 const rawVenues = data.venues || [];
-                venues = rawVenues
+                allApiVenues = rawVenues
                     .filter(v => v.name !== null && v.name !== undefined)
                     .map(v => ({ id: v.id, name: v.name, displayName: v.name }))
                     .sort((a, b) => a.displayName.localeCompare(b.displayName));
 
-                // If no named venues came back, use all venue IDs with placeholder labels
-                if (venues.length === 0 && rawVenues.length > 0) {
-                    venues = rawVenues.map((v, i) => ({
+                if (allApiVenues.length === 0 && rawVenues.length > 0) {
+                    allApiVenues = rawVenues.map((v, i) => ({
                         id: v.id,
                         name: v.id,
                         displayName: `Venue ${i + 1}`
                     }));
                 }
 
-                selectedVenueIds = new Set(venues.map(v => v.id));
-                buildVenueCheckboxes();
-                updateDropdownLabel();
-                renderShows();
+                // Build venues for the currently selected city
+                rebuildVenuesForCity();
             })
             .catch(err => {
                 document.getElementById('showsContainer').innerHTML =
