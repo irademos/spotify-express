@@ -158,7 +158,7 @@ document.addEventListener('DOMContentLoaded', function () {
     document.getElementById('citySelect').addEventListener('change', function () {
         selectedCity = this.value;
         renderScrapeVenues();
-        rebuildVenuesForCity();
+        loadShows(`/api/shows/${encodeURIComponent(selectedCity)}`);
     });
 
     // Scrape dropdown open/close
@@ -801,5 +801,6 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Support ?refresh=1 in URL to bypass server cache
     const refresh = new URLSearchParams(window.location.search).get('refresh') === '1';
-    loadShows(refresh ? '/api/atlanta-shows?refresh=1' : '/api/atlanta-shows');
+    const initialUrl = `/api/shows/${encodeURIComponent(selectedCity)}` + (refresh ? '?refresh=1' : '');
+    loadShows(initialUrl);
 });
