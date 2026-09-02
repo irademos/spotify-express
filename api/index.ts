@@ -155,6 +155,7 @@ app.get('/api/youtube-search', async (req: any, res: any) => {
     try {
       const resp = await axios.get('https://www.googleapis.com/youtube/v3/search', {
         params: { key: apiKey, q, part: 'snippet', type: 'video', maxResults: 1 },
+        headers: { Referer: 'https://upcoming-shows.vercel.app/' },
         timeout: 8000,
       });
       const items: any[] = resp.data?.items || [];
