@@ -3,19 +3,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Upcoming Shows Playlist</title>
-    <link rel="stylesheet" href="/styles.css"> <!-- Correct path to styles.css -->
+    <title>Spotify Tools</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/styles.css">
 </head>
-<body>
-    <div>
-        <h1>Upcoming Shows Playlist</h1>
-        <div id="content"></div>
-        <!-- Add the login button template -->
-        <div id="loginTemplate">
-            <button id="loginButton">Login with Spotify</button>
-            <button id="joinBeta">Join Beta</button>
+<body class="landing">
+    <div class="landing-container">
+        <div class="landing-card">
+            <div class="logo-mark">♫</div>
+            <h1 class="landing-title">Spotify Tools</h1>
+            <p class="landing-subtitle">Smart playlists and personalized features, powered by your Spotify library.</p>
+            <div class="landing-actions">
+                <button id="loginButton" class="btn btn-primary">Connect with Spotify</button>
+                <button id="joinBeta" class="btn btn-ghost">Join the Beta</button>
+            </div>
         </div>
-        <script src="/login.js"></script> <!-- Correct path to scripts.js -->
     </div>
+    <script src="/login.js"></script>
 </body>
 </html>

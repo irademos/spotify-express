@@ -4,17 +4,40 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Spotify Tools</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/styles.css" />
 </head>
-<body>
-  <div>
-    <h1>Welcome to Spotify Tools</h1>
-    <p>Hello, <span id="userDisplayName"></span></p>
-    <button id="autoPlaylist">Auto Playlist</button>
-    <button id="aiDj">AI DJ</button>
-    <button id="atlantaShows">Atlanta Shows</button>
-    <script src="/utils.js"></script>
-    <script src="/dashboard.js"></script>
+<body class="dashboard">
+  <div class="dashboard-container">
+    <header class="dashboard-header">
+      <span class="logo-mark small">♫</span>
+      <span class="site-name">Spotify Tools</span>
+      <span class="user-greeting">Hello, <span id="userDisplayName"></span></span>
+    </header>
+    <main class="dashboard-main">
+      <h1 class="dashboard-title">What would you like to do?</h1>
+      <div class="feature-grid">
+        <button id="autoPlaylist" class="feature-card">
+          <span class="feature-icon">🎵</span>
+          <span class="feature-label">Auto Playlist</span>
+          <span class="feature-desc">Generate playlists from your listening history</span>
+        </button>
+        <button id="aiDj" class="feature-card">
+          <span class="feature-icon">🎛️</span>
+          <span class="feature-label">AI DJ</span>
+          <span class="feature-desc">Let AI curate your next session</span>
+        </button>
+        <button id="atlantaShows" class="feature-card">
+          <span class="feature-icon">🎤</span>
+          <span class="feature-label">Atlanta Shows</span>
+          <span class="feature-desc">Discover upcoming live shows near you</span>
+        </button>
+      </div>
+    </main>
   </div>
+  <script src="/utils.js"></script>
+  <script src="/dashboard.js"></script>
 </body>
 </html>
