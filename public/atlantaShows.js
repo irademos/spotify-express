@@ -522,8 +522,28 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 
     document.getElementById('backBtn').addEventListener('click', () => {
-        window.location.href = '/upcoming-shows';
+        window.location.href = '/';
     });
+
+    // Dark/light mode toggle
+    const themeToggle = document.getElementById('themeToggle');
+    const savedTheme = localStorage.getItem('shows-theme') || 'dark';
+    document.documentElement.setAttribute('data-theme', savedTheme);
+    updateThemeToggle(savedTheme);
+
+    function updateThemeToggle(theme) {
+        if (themeToggle) themeToggle.textContent = theme === 'dark' ? '☀ Light' : '☾ Dark';
+    }
+
+    if (themeToggle) {
+        themeToggle.addEventListener('click', () => {
+            const current = document.documentElement.getAttribute('data-theme') || 'dark';
+            const next = current === 'dark' ? 'light' : 'dark';
+            document.documentElement.setAttribute('data-theme', next);
+            localStorage.setItem('shows-theme', next);
+            updateThemeToggle(next);
+        });
+    }
 
     // Dropdown open/close
     const trigger = document.getElementById('dropdownTrigger');
