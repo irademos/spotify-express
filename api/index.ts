@@ -131,21 +131,43 @@ app.get('/explore', function (req: any, res: any) {
   res.sendFile(path.join(__dirname, '..', 'components', 'explore.htm'));
 });
 
+async function youtubeSearchScrape(q: string): Promise<string | null> {
+  const resp = await axios.get('https://www.youtube.com/results', {
+    params: { search_query: q },
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Accept-Language': 'en-US,en;q=0.9',
+    },
+    timeout: 10000,
+  });
+  const html: string = resp.data;
+  const match = html.match(/"videoId":"([a-zA-Z0-9_-]{11})"/);
+  return match ? match[1] : null;
+}
+
 app.get('/api/youtube-search', async (req: any, res: any) => {
   const q = req.query.q as string;
   if (!q) return res.status(400).json({ error: 'Missing query' });
 
   const apiKey = process.env.YOUTUBE_API_KEY;
-  if (!apiKey) return res.status(503).json({ error: 'YouTube API not configured' });
+
+  if (apiKey) {
+    try {
+      const resp = await axios.get('https://www.googleapis.com/youtube/v3/search', {
+        params: { key: apiKey, q, part: 'snippet', type: 'video', maxResults: 1 },
+        timeout: 8000,
+      });
+      const items: any[] = resp.data?.items || [];
+      if (items.length === 0) return res.json({ videoId: null });
+      return res.json({ videoId: items[0].id.videoId });
+    } catch (err: any) {
+      console.error('[youtube-search] API key failed, falling back to scrape:', err.message);
+    }
+  }
 
   try {
-    const resp = await axios.get('https://www.googleapis.com/youtube/v3/search', {
-      params: { key: apiKey, q, part: 'snippet', type: 'video', maxResults: 1 },
-      timeout: 8000,
-    });
-    const items: any[] = resp.data?.items || [];
-    if (items.length === 0) return res.json({ videoId: null });
-    res.json({ videoId: items[0].id.videoId });
+    const videoId = await youtubeSearchScrape(q);
+    res.json({ videoId });
   } catch (err: any) {
     console.error('[youtube-search]', err.message);
     res.status(500).json({ error: 'Search failed' });
