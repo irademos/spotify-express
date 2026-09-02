@@ -290,7 +290,7 @@ document.addEventListener('DOMContentLoaded', function () {
             const res = await fetch('/api/trigger-scrape', { method: 'POST' });
             const json = await res.json();
             if (res.ok) {
-                status.textContent = 'Scrape triggered! Check GitHub Actions for progress.';
+                status.textContent = 'Checking for updates. This may take a few minutes.';
                 status.style.color = '#1DB954';
             } else {
                 status.textContent = json.error || 'Failed to trigger.';

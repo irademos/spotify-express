@@ -430,6 +430,50 @@
         .yt-video-wrap.collapsed { height: 0; }
         #yt-iframe-container { width: 340px; height: 191px; }
 
+        /* Image popup */
+        .img-popup-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.7);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+        .img-popup-overlay.active { display: flex; }
+        .img-popup-inner { position: relative; max-width: 90vw; max-height: 90vh; }
+        .img-popup-inner img {
+            display: block; max-width: 80vw; max-height: 80vh;
+            border-radius: 8px; object-fit: contain;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+        }
+        .img-popup-close {
+            position: absolute; top: -14px; right: -14px;
+            width: 32px; height: 32px; min-width: 32px;
+            background: var(--card-bg); color: var(--text-primary);
+            border: 1px solid var(--border); border-radius: 50%;
+            font-size: 18px; line-height: 1; cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            padding: 0; box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+        }
+        .img-popup-close:hover { background: var(--surface-hover); }
+
+        /* Spotify concert icon */
+        .concert-link {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 22px; height: 22px;
+            color: #1db954; text-decoration: none; flex-shrink: 0;
+            opacity: 0.75; transition: opacity 0.15s;
+        }
+        .concert-link:hover { opacity: 1; }
+        .concert-link svg { width: 14px; height: 14px; fill: currentColor; }
+
+        /* Clickable date */
+        .date-link {
+            color: inherit; text-decoration: none; display: block;
+        }
+        .date-link:hover .date-main { color: #1db954; }
+
         @media (max-width: 560px) {
             .show-item { grid-template-columns: 120px 1fr; }
             .show-venue-name { text-align: left; grid-column: 2; margin-top: -8px; }
@@ -514,6 +558,14 @@
         <div id="showsContainer"></div>
     </div>
 
+    <!-- Image popup modal -->
+    <div class="img-popup-overlay" id="imgPopupOverlay">
+        <div class="img-popup-inner">
+            <button class="img-popup-close" id="imgPopupClose" title="Close">&times;</button>
+            <img id="imgPopupImg" src="" alt="">
+        </div>
+    </div>
+
     <!-- Toast -->
     <div class="toast" id="toast"></div>
 
@@ -548,6 +600,24 @@
         themeToggle.addEventListener('click', () => {
             applyTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
         });
+
+        // ── Image popup ───────────────────────────────────────────────────────
+        const imgPopupOverlay = document.getElementById('imgPopupOverlay');
+        const imgPopupImg     = document.getElementById('imgPopupImg');
+
+        function openImgPopup(src, alt) {
+            imgPopupImg.src = src;
+            imgPopupImg.alt = alt;
+            imgPopupOverlay.classList.add('active');
+        }
+        function closeImgPopup() {
+            imgPopupOverlay.classList.remove('active');
+            imgPopupImg.src = '';
+        }
+
+        document.getElementById('imgPopupClose').addEventListener('click', closeImgPopup);
+        imgPopupOverlay.addEventListener('click', e => { if (e.target === imgPopupOverlay) closeImgPopup(); });
+        document.addEventListener('keydown', e => { if (e.key === 'Escape') closeImgPopup(); });
 
         // ── Toast ─────────────────────────────────────────────────────────────
         let toastTimer = null;
@@ -824,7 +894,7 @@
                 const res = await fetch('/api/trigger-scrape', { method: 'POST' });
                 const json = await res.json();
                 if (res.ok) {
-                    status.textContent = 'Triggered! Check GitHub Actions for progress.';
+                    status.textContent = 'Checking for updates. This may take a few minutes.';
                     status.style.color = '#1DB954';
                 } else {
                     status.textContent = json.error || 'Failed to trigger.';
@@ -1060,12 +1130,22 @@
                     img.src = show.firstArtistAvatarUrl;
                     img.alt = show.artists[0] || '';
                     img.loading = 'lazy';
+                    img.addEventListener('click', () => openImgPopup(show.firstArtistAvatarUrl, show.artists[0] || ''));
                     dateCell.appendChild(img);
                 }
+
+                // Date → Google search for "date artist venue"
+                const googleQuery = `${date.monthStr} ${date.dayNum} ${date.year} ${show.artists[0] || ''} ${show.venue}`;
+                const dateLink = document.createElement('a');
+                dateLink.className = 'date-link';
+                dateLink.href = `https://www.google.com/search?q=${encodeURIComponent(googleQuery)}`;
+                dateLink.target = '_blank';
+                dateLink.rel = 'noopener noreferrer';
                 const dateDiv = document.createElement('div');
                 dateDiv.className = 'show-date';
                 dateDiv.innerHTML = `<div class="date-main">${escHtml(date.monthStr)} ${date.dayNum}</div><div class="date-sub">${date.dayOfWeek}, ${date.year}</div>`;
-                dateCell.appendChild(dateDiv);
+                dateLink.appendChild(dateDiv);
+                dateCell.appendChild(dateLink);
                 li.appendChild(dateCell);
 
                 // Artists cell
@@ -1097,10 +1177,19 @@
                         chip.appendChild(btn);
                     }
 
-                    const nameSpan = document.createElement('span');
-                    nameSpan.textContent = name;
-                    if (songs.length === 0) nameSpan.style.color = 'var(--text-secondary)';
-                    chip.appendChild(nameSpan);
+                    const nameLink = document.createElement('a');
+                    nameLink.textContent = name;
+                    nameLink.target = '_blank';
+                    nameLink.rel = 'noopener noreferrer';
+                    nameLink.style.cssText = 'color:inherit;text-decoration:none;';
+                    nameLink.style.color = songs.length === 0 ? 'var(--text-secondary)' : 'inherit';
+                    const spotifyId = show.spotifyArtistIds?.[aIdx];
+                    nameLink.href = spotifyId
+                        ? `https://open.spotify.com/artist/${spotifyId}`
+                        : `https://open.spotify.com/search/${encodeURIComponent(name)}`;
+                    nameLink.addEventListener('mouseover', () => nameLink.style.textDecoration = 'underline');
+                    nameLink.addEventListener('mouseout',  () => nameLink.style.textDecoration = 'none');
+                    chip.appendChild(nameLink);
 
                     if (aIdx < show.artists.length - 1) {
                         const sep = document.createElement('span');
@@ -1116,6 +1205,11 @@
                 // Venue cell
                 const venueDiv = document.createElement('div');
                 venueDiv.className = 'show-venue-name';
+                venueDiv.style.display = 'flex';
+                venueDiv.style.flexDirection = 'column';
+                venueDiv.style.alignItems = 'flex-end';
+                venueDiv.style.gap = '4px';
+
                 const venueLink = document.createElement('a');
                 venueLink.className = 'venue-link';
                 venueLink.textContent = show.venue;
@@ -1123,6 +1217,20 @@
                 venueLink.target = '_blank';
                 venueLink.rel = 'noopener noreferrer';
                 venueDiv.appendChild(venueLink);
+
+                if (show.concertUri) {
+                    const concertId = show.concertUri.split(':')[2];
+                    const spotifyBtn = document.createElement('a');
+                    spotifyBtn.className = 'concert-link';
+                    spotifyBtn.href = `https://open.spotify.com/concert/${concertId}`;
+                    spotifyBtn.target = '_blank';
+                    spotifyBtn.rel = 'noopener noreferrer';
+                    spotifyBtn.title = 'View on Spotify';
+                    // Spotify logo SVG
+                    spotifyBtn.innerHTML = `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/></svg>`;
+                    venueDiv.appendChild(spotifyBtn);
+                }
+
                 li.appendChild(venueDiv);
 
                 ul.appendChild(li);
