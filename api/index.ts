@@ -127,6 +127,31 @@ app.get('/upcoming-shows', requireSpotifyAuth, function (req: any, res: any) {
   res.sendFile(path.join(__dirname, '..', 'components', 'atlantaShows.htm'));
 });
 
+app.get('/explore', function (req: any, res: any) {
+  res.sendFile(path.join(__dirname, '..', 'components', 'explore.htm'));
+});
+
+app.get('/api/youtube-search', async (req: any, res: any) => {
+  const q = req.query.q as string;
+  if (!q) return res.status(400).json({ error: 'Missing query' });
+
+  const apiKey = process.env.YOUTUBE_API_KEY;
+  if (!apiKey) return res.status(503).json({ error: 'YouTube API not configured' });
+
+  try {
+    const resp = await axios.get('https://www.googleapis.com/youtube/v3/search', {
+      params: { key: apiKey, q, part: 'snippet', type: 'video', maxResults: 1 },
+      timeout: 8000,
+    });
+    const items: any[] = resp.data?.items || [];
+    if (items.length === 0) return res.json({ videoId: null });
+    res.json({ videoId: items[0].id.videoId });
+  } catch (err: any) {
+    console.error('[youtube-search]', err.message);
+    res.status(500).json({ error: 'Search failed' });
+  }
+});
+
 app.post('/api/cache-artist-id', async (req, res) => {
     const { name, spotifyId } = req.body;
     if (!name || !spotifyId) return res.status(400).json({ error: 'Missing name or spotifyId' });
