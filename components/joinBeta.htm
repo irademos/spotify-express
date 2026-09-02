@@ -4,81 +4,82 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Join Beta — Spotify Tools</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/styles.css">
     <style>
-        #betaForm input[type="text"],
-        #betaForm input[type="email"] {
-            display: block;
-            width: 80%;
-            margin: 10px auto;
-            padding: 10px;
-            box-sizing: border-box;
+        .beta-form {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin: 24px 0 20px;
         }
-        #betaForm button[type="submit"] {
-            margin-top: 12px;
-        }
-        #successMessage p {
-            margin: 8px 0;
-            color: #555;
+        .beta-form input {
+            width: 100%;
+            margin: 0;
         }
         .spinner {
             display: inline-block;
-            width: 16px;
-            height: 16px;
-            border: 2px solid #ccc;
-            border-top-color: #333;
+            width: 14px;
+            height: 14px;
+            border: 2px solid rgba(255,255,255,0.2);
+            border-top-color: var(--text-secondary);
             border-radius: 50%;
             animation: spin 0.8s linear infinite;
             vertical-align: middle;
             margin-right: 6px;
         }
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
+        @keyframes spin { to { transform: rotate(360deg); } }
         #errorMsg {
-            color: #c0392b;
-            margin-top: 10px;
+            color: #e05555;
+            font-size: 0.85rem;
             display: none;
+            margin-top: 4px;
         }
         .back-link {
-            display: inline-block;
-            margin-top: 16px;
-            color: #555;
-            text-decoration: underline;
-            cursor: pointer;
             background: none;
             border: none;
-            font-size: 0.9em;
+            color: var(--text-secondary);
+            font-family: var(--font);
+            font-size: 0.85rem;
+            cursor: pointer;
             padding: 0;
+            text-decoration: underline;
+            text-underline-offset: 3px;
         }
-        .back-link:hover {
-            background: none;
-            color: #111;
-        }
+        .back-link:hover { color: var(--text-primary); background: none; }
+        .success-icon { font-size: 2rem; margin-bottom: 12px; display: block; }
+        .muted { color: var(--text-secondary); font-size: 0.85rem; margin-top: 8px; }
     </style>
 </head>
-<body>
-    <div>
-        <div id="betaForm">
-            <h1>Join the Beta</h1>
-            <p>Get early access to Spotify Tools. Enter your info and we'll be in touch.</p>
-            <form id="joinBetaForm" onsubmit="handleSubmit(event)">
-                <input type="text" id="fullName" placeholder="Full Name" required autocomplete="name">
-                <input type="email" id="emailInput" placeholder="Email Address" required autocomplete="email">
-                <button type="submit" id="submitBtn">Submit</button>
-            </form>
-            <p id="errorMsg"></p>
-            <button class="back-link" onclick="window.location.href='/'">Back to home</button>
-        </div>
+<body class="landing">
+    <div class="landing-container">
+        <div class="landing-card" style="text-align:left">
 
-        <div id="successMessage" style="display:none">
-            <h1>Request Sent!</h1>
-            <p>Thanks! Your beta request has been received.</p>
-            <p id="waitingStatus">
-                <span class="spinner"></span>Waiting for email confirmation&hellip;
-            </p>
-            <p style="color:#888; font-size:0.9em">We'll reach out to you at <strong id="confirmedEmail"></strong> once a spot opens up.</p>
-            <button class="back-link" onclick="window.location.href='/'">Back to home</button>
+            <div id="betaForm">
+                <button class="back-link" onclick="window.location.href='/'" style="margin-bottom:20px">← Back</button>
+                <h1 class="landing-title">Join the Beta</h1>
+                <p class="landing-subtitle" style="margin-bottom:0">Get early access to Spotify Tools. Enter your info and we'll be in touch.</p>
+                <form id="joinBetaForm" class="beta-form" onsubmit="handleSubmit(event)">
+                    <input type="text" id="fullName" placeholder="Full Name" required autocomplete="name">
+                    <input type="email" id="emailInput" placeholder="Email Address" required autocomplete="email">
+                    <button type="submit" id="submitBtn" class="btn btn-primary" style="margin-top:4px">Submit</button>
+                </form>
+                <p id="errorMsg"></p>
+            </div>
+
+            <div id="successMessage" style="display:none">
+                <span class="success-icon">✅</span>
+                <h1 class="landing-title">You're on the list!</h1>
+                <p class="landing-subtitle" style="margin-bottom:0">Thanks! Your beta request has been received.</p>
+                <p id="waitingStatus" class="muted">
+                    <span class="spinner"></span>Waiting for email confirmation&hellip;
+                </p>
+                <p class="muted">We'll reach out at <strong id="confirmedEmail" style="color:var(--text-primary)"></strong> once a spot opens up.</p>
+                <button class="back-link" onclick="window.location.href='/'">← Back to home</button>
+            </div>
+
         </div>
     </div>
 
