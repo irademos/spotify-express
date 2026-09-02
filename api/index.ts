@@ -365,8 +365,7 @@ app.delete('/api/city-venues/:city/venues/:venueId', requireAdmin, async (req, r
 // ── Venue reports ────────────────────────────────────────────────────────────
 
 app.post('/api/venue-reports', async (req, res) => {
-    const userId = await getSpotifyUserId(req);
-    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+    const userId = (await getSpotifyUserId(req)) || 'anonymous';
 
     const { city, venueId, venueName } = req.body;
     if (!city || !venueId) return res.status(400).json({ error: 'Missing city or venueId' });
@@ -408,8 +407,7 @@ app.get('/api/is-admin', async (req, res) => {
 // ── Video reports ────────────────────────────────────────────────────────────
 
 app.post('/api/video-reports', async (req, res) => {
-    const userId = await getSpotifyUserId(req);
-    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+    const userId = (await getSpotifyUserId(req)) || 'anonymous';
 
     const { artistName, videoId } = req.body;
     if (!artistName || !videoId) return res.status(400).json({ error: 'Missing artistName or videoId' });
@@ -438,6 +436,42 @@ app.get('/api/video-reports', requireAdmin, async (req, res) => {
         }
         grouped[key].count++;
         if (r.created_at > grouped[key].latestAt) grouped[key].latestAt = r.created_at;
+    });
+
+    res.json(Object.values(grouped).sort((a: any, b: any) => b.count - a.count));
+});
+
+// ── City reports ──────────────────────────────────────────────────────────────
+
+app.post('/api/city-reports', async (req, res) => {
+    const userId = (await getSpotifyUserId(req)) || 'anonymous';
+
+    const { city } = req.body;
+    if (!city) return res.status(400).json({ error: 'Missing city' });
+
+    const { error } = await supabase.from('city_reports').upsert(
+        { city, reporter_id: userId },
+        { onConflict: 'city,reporter_id', ignoreDuplicates: true }
+    );
+    if (error) return res.status(500).json({ error: error.message });
+    res.json({ ok: true });
+});
+
+app.get('/api/city-reports', requireAdmin, async (req, res) => {
+    const { data, error } = await supabase
+        .from('city_reports')
+        .select('city, reporter_id, created_at')
+        .order('created_at', { ascending: false });
+
+    if (error) return res.status(500).json({ error: error.message });
+
+    const grouped: Record<string, any> = {};
+    (data || []).forEach((r: any) => {
+        if (!grouped[r.city]) {
+            grouped[r.city] = { city: r.city, count: 0, latestAt: r.created_at };
+        }
+        grouped[r.city].count++;
+        if (r.created_at > grouped[r.city].latestAt) grouped[r.city].latestAt = r.created_at;
     });
 
     res.json(Object.values(grouped).sort((a: any, b: any) => b.count - a.count));

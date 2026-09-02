@@ -296,6 +296,16 @@
         <hr class="section-divider">
 
         <div class="header-actions">
+            <div class="section-title" style="margin-bottom:0;">Reported Cities</div>
+            <button class="refresh-btn" id="refreshCityBtn">&#8635; Refresh</button>
+        </div>
+        <div id="cityReportsContainer">
+            <div class="loading-state">Loading city reports&hellip;</div>
+        </div>
+
+        <hr class="section-divider">
+
+        <div class="header-actions">
             <div class="section-title" style="margin-bottom:0;">Video Reports</div>
             <button class="refresh-btn" id="refreshVideoBtn">&#8635; Refresh</button>
         </div>
@@ -404,6 +414,66 @@
         }
 
         document.getElementById('refreshBtn').addEventListener('click', loadReports);
+
+        // ── City reports ──────────────────────────────────────────────────────
+
+        async function loadCityReports() {
+            const container = document.getElementById('cityReportsContainer');
+            container.innerHTML = '<div class="loading-state">Loading city reports&hellip;</div>';
+
+            try {
+                const res = await fetch('/api/city-reports');
+                if (res.status === 403) {
+                    container.innerHTML = '<div class="empty-state"><div class="icon">🔒</div>Access denied.</div>';
+                    return;
+                }
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const reports = await res.json();
+
+                if (reports.length === 0) {
+                    container.innerHTML = '<div class="empty-state"><div class="icon">✅</div>No city reports — all clear.</div>';
+                    return;
+                }
+
+                const list = document.createElement('div');
+                list.className = 'notifications-list';
+
+                reports.forEach(r => {
+                    const card = document.createElement('div');
+                    card.className = 'notification-card' + (r.count >= 3 ? ' high-reports' : '');
+
+                    const icon = document.createElement('div');
+                    icon.className = 'notif-icon';
+                    icon.textContent = '🏙';
+
+                    const body = document.createElement('div');
+                    body.className = 'notif-body';
+
+                    const cityName = document.createElement('div');
+                    cityName.className = 'notif-venue';
+                    cityName.textContent = r.city;
+
+                    body.appendChild(cityName);
+
+                    const countBadge = document.createElement('div');
+                    countBadge.className = 'report-count' + (r.count === 1 ? ' single' : '');
+                    countBadge.textContent = r.count === 1 ? '1 report' : `${r.count} reports`;
+
+                    card.appendChild(icon);
+                    card.appendChild(body);
+                    card.appendChild(countBadge);
+                    list.appendChild(card);
+                });
+
+                container.innerHTML = '';
+                container.appendChild(list);
+            } catch (err) {
+                container.innerHTML = `<div class="empty-state"><div class="icon">⚠️</div>Failed to load city reports.<br><small style="color:#555">${err.message}</small></div>`;
+            }
+        }
+
+        document.getElementById('refreshCityBtn').addEventListener('click', loadCityReports);
+        loadCityReports();
 
         // ── Video reports ─────────────────────────────────────────────────────
 
