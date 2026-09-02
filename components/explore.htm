@@ -987,7 +987,43 @@
 
         let activeShowIdx    = null;
         let activeArtistName = null;
+        let activeArtistIdx  = null;
         const showFallbackState = {};
+
+        function playNextArtist() {
+            const visible = allShows.filter(s => selectedVenueIds.has(s.venueId) && isUpcoming(s));
+            const visIdx  = visible.findIndex(s => allShows.indexOf(s) === activeShowIdx);
+            if (visIdx === -1) return;
+
+            const show    = visible[visIdx];
+            const nextIdx = (activeArtistIdx ?? 0) + 1;
+
+            if (nextIdx < show.artists.length) {
+                // Next artist within this event
+                const name  = show.artists[nextIdx];
+                const songs = artistTopSongs[name] || [];
+                if (songs.length > 0) {
+                    delete showFallbackState[activeShowIdx + '|' + name];
+                    activeArtistIdx = nextIdx;
+                    searchAndPlay(activeShowIdx, name, songs[0]);
+                    return;
+                }
+            }
+
+            // Move to next event in visible list
+            const nextVisIdx = visIdx + 1;
+            if (nextVisIdx < visible.length) {
+                const nextShow    = visible[nextVisIdx];
+                const nextGlobal  = allShows.indexOf(nextShow);
+                const firstName   = nextShow.artists[0];
+                const songs       = artistTopSongs[firstName] || [];
+                if (songs.length > 0) {
+                    delete showFallbackState[nextGlobal + '|' + firstName];
+                    activeArtistIdx = 0;
+                    searchAndPlay(nextGlobal, firstName, songs[0]);
+                }
+            }
+        }
 
         window.onYouTubeIframeAPIReady = function () {
             ytPlayer = new YT.Player('yt-iframe-container', {
@@ -1008,6 +1044,7 @@
                         } else if (e.data === YT.PlayerState.ENDED) {
                             btn.textContent = '▶';
                             document.querySelectorAll('.play-btn').forEach(b => b.classList.remove('active'));
+                            playNextArtist();
                         }
                     },
                     onError: function () { handleYtError(); }
@@ -1057,6 +1094,7 @@
 
             activeShowIdx    = showIdx;
             activeArtistName = artistName;
+            activeArtistIdx  = (allShows[showIdx]?.artists ?? []).indexOf(artistName);
 
             document.getElementById('ytArtistName').textContent = artistName;
             document.getElementById('ytSongName').textContent   = songName;
@@ -1080,8 +1118,9 @@
 
         document.getElementById('ytCloseBtn').addEventListener('click', () => {
             closePlayer();
-            activeShowIdx = null;
+            activeShowIdx    = null;
             activeArtistName = null;
+            activeArtistIdx  = null;
         });
 
         document.getElementById('ytToggleVideo').addEventListener('click', () => {
