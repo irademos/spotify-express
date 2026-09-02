@@ -243,6 +243,21 @@ async function fetchVenueViaPartnerApi(
   }
 }
 
+async function fetchArtistTopTracks(artistId: string, token: string): Promise<string[]> {
+  try {
+    const resp = await axios.get(`https://api.spotify.com/v1/artists/${artistId}/top-tracks`, {
+      params: { market: 'US' },
+      headers: { Authorization: `Bearer ${token}` },
+      timeout: 8000,
+    });
+    const tracks: any[] = resp.data?.tracks || [];
+    return tracks.slice(0, 2).map((t: any) => t.name).filter(Boolean);
+  } catch (err: any) {
+    console.log(`[scraper] top-tracks "${artistId}": ${err.response?.status || err.message}`);
+    return [];
+  }
+}
+
 async function getClientCredentialsToken(): Promise<string | null> {
   const clientId = process.env.SPOTIFY_CLIENT_ID;
   const clientSecret = process.env.SPOTIFY_CLIENT_SECRET;
@@ -440,12 +455,40 @@ async function scrapeCity(
   const resolved = allShows.filter((s) => s.spotifyArtistIds?.some((id) => id !== null)).length;
   console.log(`[scraper] ${city}: ${resolved}/${allShows.length} shows have at least one Spotify artist ID`);
 
+  // Build artistId map (name → id) from all resolved sources
+  const artistTopSongs: Record<string, string[]> = {};
+  if (searchToken) {
+    const uniqueArtistIds = new Map<string, string>();
+    allShows.forEach((show) => {
+      show.artists.forEach((name, idx) => {
+        const id = show.spotifyArtistIds?.[idx] || artistIdFromApi.get(name) || null;
+        if (id && !uniqueArtistIds.has(name)) uniqueArtistIds.set(name, id);
+      });
+    });
+
+    const entries = Array.from(uniqueArtistIds.entries());
+    console.log(`[scraper] ${city}: fetching top tracks for ${entries.length} artists...`);
+    for (let i = 0; i < entries.length; i += 5) {
+      const batch = entries.slice(i, i + 5);
+      const results2 = await Promise.all(
+        batch.map(async ([name, id]) => ({
+          name,
+          songs: await fetchArtistTopTracks(id, searchToken),
+        }))
+      );
+      results2.forEach(({ name, songs }) => {
+        if (songs.length > 0) artistTopSongs[name] = songs;
+      });
+    }
+    console.log(`[scraper] ${city}: top songs fetched for ${Object.keys(artistTopSongs).length} artists`);
+  }
+
   const venues = results.map((r) => ({
     id: r.venueId,
     name: r.venueName !== r.venueId ? r.venueName : null,
   }));
 
-  const payload = { shows: allShows, venues, scrapedAt: new Date().toISOString() };
+  const payload = { shows: allShows, venues, artistTopSongs, scrapedAt: new Date().toISOString() };
 
   // Write to generic shows_cache keyed by city
   const { error: cacheErr } = await supabase

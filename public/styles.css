@@ -106,6 +106,20 @@ body.landing {
   background: var(--accent-hover);
 }
 
+.btn-secondary {
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-secondary:hover {
+  background: var(--accent);
+  color: #000;
+}
+
 .btn-ghost {
   background: transparent;
   color: var(--text-secondary);

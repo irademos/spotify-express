@@ -1,0 +1,856 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Explore Upcoming Shows</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --bg: #f0f0f0;
+            --card-bg: #ffffff;
+            --text-primary: #111;
+            --text-secondary: #555;
+            --text-muted: #777;
+            --border: #e8e8e8;
+            --border-light: #eee;
+            --surface: #fafafa;
+            --surface-hover: #f5f5f5;
+            --surface-item-hover: #f7f7f7;
+            --dropdown-bg: #ffffff;
+            --dropdown-border: #ccc;
+            --input-bg: #ffffff;
+            --input-border: #ccc;
+            --shadow: rgba(0,0,0,0.15);
+            --accent: #1db954;
+            --accent-hover: #158f3f;
+            --player-bg: #ffffff;
+        }
+
+        :root[data-theme="dark"] {
+            --bg: #111113;
+            --card-bg: #1c1c1f;
+            --text-primary: #f0f0f0;
+            --text-secondary: #aaa;
+            --text-muted: #888;
+            --border: rgba(255,255,255,0.1);
+            --border-light: rgba(255,255,255,0.08);
+            --surface: #242428;
+            --surface-hover: #2a2a2e;
+            --surface-item-hover: #2a2a2e;
+            --dropdown-bg: #1c1c1f;
+            --dropdown-border: rgba(255,255,255,0.15);
+            --input-bg: #242428;
+            --input-border: rgba(255,255,255,0.15);
+            --shadow: rgba(0,0,0,0.4);
+            --player-bg: #1c1c1f;
+        }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            background-color: var(--bg);
+            min-height: 100vh;
+            padding: 24px 16px 120px;
+            color: var(--text-primary);
+            transition: background-color 0.2s, color 0.2s;
+        }
+
+        .page-card {
+            max-width: 860px;
+            margin: 0 auto;
+            background: var(--card-bg);
+            border-radius: 8px;
+            box-shadow: 0 2px 5px var(--shadow);
+            padding: 28px 28px 40px;
+            transition: background-color 0.2s;
+        }
+
+        .page-header {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .page-header h1 {
+            font-size: 1.7rem;
+            color: var(--text-primary);
+        }
+
+        button {
+            padding: 8px 16px;
+            background-color: var(--surface);
+            color: var(--text-primary);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        button:hover { background-color: var(--surface-hover); }
+
+        .back-btn { padding: 8px 14px; }
+
+        .theme-toggle-btn {
+            margin-left: auto;
+            padding: 6px 12px;
+            font-size: 12px;
+            background: var(--surface);
+            color: var(--text-secondary);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: background 0.15s, color 0.15s;
+        }
+        .theme-toggle-btn:hover {
+            background: var(--surface-hover);
+            color: var(--text-primary);
+        }
+
+        .filter-section {
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .filter-label {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            white-space: nowrap;
+        }
+
+        .dropdown-wrapper { position: relative; }
+
+        .dropdown-trigger {
+            background: var(--dropdown-bg);
+            border: 1px solid var(--dropdown-border);
+            color: var(--text-primary);
+            min-width: 200px;
+            text-align: left;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            font-size: 14px;
+        }
+        .dropdown-trigger:hover { background: var(--surface-hover); }
+        .dropdown-trigger .arrow { transition: transform 0.15s; }
+        .dropdown-trigger.open .arrow { transform: rotate(180deg); }
+
+        .dropdown-panel {
+            display: none;
+            position: absolute;
+            top: calc(100% + 4px);
+            left: 0;
+            z-index: 200;
+            background: var(--dropdown-bg);
+            border: 1px solid var(--dropdown-border);
+            border-radius: 4px;
+            box-shadow: 0 4px 14px var(--shadow);
+            min-width: 240px;
+            max-height: 320px;
+            overflow-y: auto;
+        }
+        .dropdown-panel.open { display: block; }
+
+        .dropdown-controls {
+            display: flex;
+            gap: 0;
+            border-bottom: 1px solid var(--border-light);
+        }
+        .dropdown-ctrl-btn {
+            background: none;
+            border: none;
+            color: #1db954;
+            font-size: 12px;
+            padding: 8px 14px;
+            cursor: pointer;
+            flex: 1;
+            text-align: center;
+            border-radius: 0;
+        }
+        .dropdown-ctrl-btn:hover { background: var(--surface-hover); color: var(--accent-hover); }
+        .dropdown-ctrl-btn + .dropdown-ctrl-btn { border-left: 1px solid var(--border-light); }
+
+        .venue-item {
+            display: flex;
+            align-items: center;
+            padding: 9px 14px;
+            cursor: pointer;
+            gap: 10px;
+        }
+        .venue-item:hover { background: var(--surface-item-hover); }
+        .venue-item input[type="checkbox"] {
+            width: 15px; height: 15px;
+            cursor: pointer; flex-shrink: 0;
+            accent-color: #1db954;
+        }
+        .venue-item label { cursor: pointer; font-size: 14px; color: var(--text-primary); line-height: 1.3; }
+
+        .shows-meta {
+            font-size: 13px;
+            color: var(--text-muted);
+            margin-bottom: 14px;
+            min-height: 18px;
+        }
+
+        .shows-list { list-style: none; }
+
+        .show-item {
+            display: grid;
+            grid-template-columns: 148px 1fr 1fr;
+            gap: 12px;
+            align-items: start;
+            padding: 14px 0;
+            border-bottom: 1px solid var(--border-light);
+        }
+        .show-item--playing {
+            background-color: rgba(30, 215, 96, 0.12);
+            border-radius: 6px;
+            padding-left: 8px;
+            padding-right: 8px;
+        }
+        .show-item:first-child { border-top: 1px solid var(--border-light); }
+
+        .show-date-cell {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .artist-avatar {
+            width: 40px; height: 40px;
+            border-radius: 50%; object-fit: cover; flex-shrink: 0;
+            cursor: pointer; transition: opacity 0.15s;
+        }
+        .artist-avatar:hover { opacity: 0.8; }
+
+        .show-date .date-main {
+            font-size: 18px; font-weight: 700;
+            color: var(--text-primary); line-height: 1.1;
+        }
+        .show-date .date-sub {
+            font-size: 12px; color: var(--text-muted); margin-top: 2px;
+        }
+
+        .show-artists {
+            font-weight: 600; font-size: 15px;
+            color: var(--text-primary);
+            display: flex; flex-wrap: wrap;
+            align-items: center; gap: 6px; row-gap: 8px;
+        }
+
+        .artist-chip {
+            display: flex; align-items: center; gap: 6px; white-space: nowrap;
+        }
+
+        .play-btn {
+            background: none;
+            border: 1px solid #1db954;
+            color: #1db954;
+            border-radius: 50%;
+            width: 28px; height: 28px; min-width: 28px;
+            padding: 0; font-size: 11px; cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            transition: background 0.15s, color 0.15s; flex-shrink: 0;
+        }
+        .play-btn:hover, .play-btn.active {
+            background: #1db954; color: #fff;
+        }
+        .play-btn.loading {
+            animation: spin 0.8s linear infinite;
+            border-style: dashed;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .show-venue-name {
+            font-size: 13px; color: var(--text-secondary); text-align: right;
+        }
+
+        .venue-link { color: inherit; text-decoration: none; }
+        .venue-link:hover { color: #1db954; text-decoration: underline; }
+
+        .state-msg {
+            text-align: center; padding: 48px 20px; color: var(--text-muted);
+        }
+        .state-msg.error { color: #b00020; }
+
+        .loading-dots::after {
+            content: '';
+            animation: dots 1.2s steps(3, end) infinite;
+        }
+        @keyframes dots {
+            0%   { content: ''; }
+            33%  { content: '.'; }
+            66%  { content: '..'; }
+            100% { content: '...'; }
+        }
+
+        /* Toast notification */
+        .toast {
+            position: fixed;
+            bottom: 80px;
+            left: 50%;
+            transform: translateX(-50%) translateY(20px);
+            background: #333;
+            color: #fff;
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-size: 13px;
+            opacity: 0;
+            transition: opacity 0.25s, transform 0.25s;
+            z-index: 600;
+            pointer-events: none;
+            white-space: nowrap;
+        }
+        .toast.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        /* Floating YouTube player */
+        #yt-player-card {
+            position: fixed;
+            bottom: 16px;
+            right: 16px;
+            width: 340px;
+            background: var(--player-bg);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            box-shadow: 0 6px 24px var(--shadow);
+            z-index: 500;
+            display: none;
+            overflow: hidden;
+        }
+
+        #yt-player-card.visible { display: block; }
+
+        .yt-player-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 12px 8px;
+            border-bottom: 1px solid var(--border-light);
+        }
+
+        .yt-now-playing-info { flex: 1; min-width: 0; }
+        .yt-artist-name {
+            font-size: 13px; font-weight: 700;
+            color: var(--text-primary);
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .yt-song-name {
+            font-size: 11px; color: var(--text-muted);
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+
+        .yt-header-btns { display: flex; align-items: center; gap: 4px; }
+
+        .yt-ctrl-btn {
+            background: none; border: none; color: var(--text-secondary);
+            cursor: pointer; font-size: 16px; padding: 4px 6px;
+            border-radius: 4px; line-height: 1;
+            transition: background 0.15s, color 0.15s;
+        }
+        .yt-ctrl-btn:hover { background: var(--surface-hover); color: var(--text-primary); }
+        .yt-ctrl-btn.accent { color: #1db954; font-size: 18px; }
+        .yt-ctrl-btn.accent:hover { background: rgba(29,185,84,0.1); }
+
+        .yt-video-wrap {
+            overflow: hidden;
+            transition: height 0.25s;
+        }
+        .yt-video-wrap.expanded { height: 192px; }
+        .yt-video-wrap.collapsed { height: 0; }
+
+        #yt-iframe-container { width: 340px; height: 191px; }
+
+        @media (max-width: 560px) {
+            .show-item { grid-template-columns: 120px 1fr; }
+            .show-venue-name { text-align: left; grid-column: 2; margin-top: -8px; }
+            .artist-avatar { width: 32px; height: 32px; }
+            #yt-player-card { width: calc(100vw - 32px); right: 16px; }
+            #yt-iframe-container { width: 100%; }
+        }
+    </style>
+</head>
+<script>
+    (function() {
+        var t = localStorage.getItem('shows-theme') || 'dark';
+        document.documentElement.setAttribute('data-theme', t);
+    })();
+</script>
+<body>
+    <div class="page-card">
+        <div class="page-header">
+            <a href="/" class="back-btn" style="text-decoration:none;padding:8px 14px;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);font-size:14px;">&#8592; Back</a>
+            <h1>Upcoming Shows</h1>
+            <button class="theme-toggle-btn" id="themeToggle">☀ Light</button>
+        </div>
+
+        <div class="filter-section">
+            <span class="filter-label">Filter:</span>
+            <div class="dropdown-wrapper" id="dropdownWrapper">
+                <button class="dropdown-trigger" id="dropdownTrigger">
+                    <span id="dropdownLabel">All Venues</span>
+                    <span class="arrow">&#9660;</span>
+                </button>
+                <div class="dropdown-panel" id="dropdownPanel">
+                    <div class="dropdown-controls">
+                        <button class="dropdown-ctrl-btn" id="selectAllBtn">Select All</button>
+                        <button class="dropdown-ctrl-btn" id="clearAllBtn">Clear All</button>
+                    </div>
+                    <div id="venueCheckboxes"></div>
+                </div>
+            </div>
+            <span id="ytStatusNote" style="font-size:12px;color:var(--text-muted);margin-left:4px;">▶ YouTube audio</span>
+        </div>
+
+        <div id="showsMeta" class="shows-meta"></div>
+        <div id="showsContainer"></div>
+    </div>
+
+    <!-- Toast -->
+    <div class="toast" id="toast"></div>
+
+    <!-- Floating YouTube player -->
+    <div id="yt-player-card">
+        <div class="yt-player-header">
+            <div class="yt-now-playing-info">
+                <div class="yt-artist-name" id="ytArtistName">—</div>
+                <div class="yt-song-name" id="ytSongName">—</div>
+            </div>
+            <div class="yt-header-btns">
+                <button class="yt-ctrl-btn accent" id="ytPlayPauseBtn" title="Play/Pause">⏸</button>
+                <button class="yt-ctrl-btn" id="ytToggleVideo" title="Show/hide video">▪</button>
+                <button class="yt-ctrl-btn" id="ytCloseBtn" title="Close">✕</button>
+            </div>
+        </div>
+        <div class="yt-video-wrap collapsed" id="ytVideoWrap">
+            <div id="yt-iframe-container"></div>
+        </div>
+    </div>
+
+    <script>
+    (function () {
+        // ── Theme ─────────────────────────────────────────────────────────────
+        const themeToggle = document.getElementById('themeToggle');
+        function applyTheme(t) {
+            document.documentElement.setAttribute('data-theme', t);
+            themeToggle.textContent = t === 'dark' ? '☀ Light' : '☾ Dark';
+            localStorage.setItem('shows-theme', t);
+        }
+        applyTheme(localStorage.getItem('shows-theme') || 'dark');
+        themeToggle.addEventListener('click', () => {
+            const current = document.documentElement.getAttribute('data-theme');
+            applyTheme(current === 'dark' ? 'light' : 'dark');
+        });
+
+        // ── Toast ─────────────────────────────────────────────────────────────
+        let toastTimer = null;
+        function showToast(msg, ms = 3000) {
+            const el = document.getElementById('toast');
+            el.textContent = msg;
+            el.classList.add('show');
+            clearTimeout(toastTimer);
+            toastTimer = setTimeout(() => el.classList.remove('show'), ms);
+        }
+
+        // ── State ─────────────────────────────────────────────────────────────
+        let allShows = [];
+        let artistTopSongs = {};
+        let venues = [];
+        let selectedVenueIds = new Set();
+        let activeShowIdx = null;
+        let activeArtistName = null;
+
+        // ── YouTube IFrame API ────────────────────────────────────────────────
+        let ytPlayer = null;
+        let ytReady = false;
+        let pendingVideoId = null;
+        let pendingTitle = null;
+        let videoShown = false;
+
+        window.onYouTubeIframeAPIReady = function () {
+            ytPlayer = new YT.Player('yt-iframe-container', {
+                width: '340',
+                height: '191',
+                playerVars: {
+                    autoplay: 1,
+                    controls: 1,
+                    rel: 0,
+                    modestbranding: 1,
+                    playsinline: 1,
+                },
+                events: {
+                    onReady: function () {
+                        ytReady = true;
+                        if (pendingVideoId) {
+                            ytPlayer.loadVideoById(pendingVideoId);
+                        }
+                    },
+                    onStateChange: function (e) {
+                        const PlayBtn = document.getElementById('ytPlayPauseBtn');
+                        if (e.data === YT.PlayerState.PLAYING) {
+                            PlayBtn.textContent = '⏸';
+                            if (activeShowIdx !== null) {
+                                document.querySelectorAll('.play-btn').forEach((b, i) => {
+                                    b.classList.toggle('active', parseInt(b.dataset.idx) === activeShowIdx);
+                                });
+                            }
+                        } else if (e.data === YT.PlayerState.PAUSED) {
+                            PlayBtn.textContent = '▶';
+                        } else if (e.data === YT.PlayerState.ENDED) {
+                            PlayBtn.textContent = '▶';
+                            clearActivePlayBtn();
+                        }
+                    },
+                    onError: function (e) {
+                        handleYtError();
+                    }
+                }
+            });
+        };
+
+        function clearActivePlayBtn() {
+            document.querySelectorAll('.play-btn').forEach(b => b.classList.remove('active'));
+        }
+
+        // Per-show fallback tracking
+        const showFallbackState = {};
+
+        function handleYtError() {
+            if (activeShowIdx === null) return;
+            const state = showFallbackState[activeShowIdx];
+            if (!state) return;
+
+            const artist = state.artistName;
+            const songs = artistTopSongs[artist] || [];
+
+            if (state.attempt === 0 && songs.length > 1) {
+                // Try second song
+                state.attempt = 1;
+                searchAndPlay(state.showIdx, artist, songs[1]);
+            } else {
+                // Both failed
+                showToast(`⚠ No YouTube audio found for ${artist}`, 3000);
+                clearActivePlayBtn();
+                closePlayer();
+                activeShowIdx = null;
+                activeArtistName = null;
+            }
+        }
+
+        async function searchAndPlay(showIdx, artistName, songName) {
+            const q = `${artistName} ${songName} official audio`;
+            showFallbackState[showIdx] = { showIdx, artistName, attempt: songName === (artistTopSongs[artistName] || [])[0] ? 0 : 1 };
+
+            // Set loading state on button
+            const btn = document.querySelector(`.play-btn[data-idx="${showIdx}"]`);
+            if (btn) { btn.classList.add('loading'); btn.textContent = '⟳'; }
+
+            let videoId = null;
+            try {
+                const resp = await fetch(`/api/youtube-search?q=${encodeURIComponent(q)}`);
+                const data = await resp.json();
+                videoId = data.videoId || null;
+            } catch (e) {
+                videoId = null;
+            }
+
+            if (btn) { btn.classList.remove('loading'); btn.textContent = '▶'; }
+
+            if (!videoId) {
+                handleYtError();
+                return;
+            }
+
+            activeShowIdx = showIdx;
+            activeArtistName = artistName;
+
+            document.getElementById('ytArtistName').textContent = artistName;
+            document.getElementById('ytSongName').textContent = songName;
+            document.getElementById('yt-player-card').classList.add('visible');
+
+            if (ytReady && ytPlayer) {
+                ytPlayer.loadVideoById(videoId);
+            } else {
+                pendingVideoId = videoId;
+            }
+        }
+
+        function closePlayer() {
+            if (ytPlayer && ytReady) {
+                try { ytPlayer.stopVideo(); } catch (e) {}
+            }
+            document.getElementById('yt-player-card').classList.remove('visible');
+            clearActivePlayBtn();
+        }
+
+        // Player controls
+        document.getElementById('ytPlayPauseBtn').addEventListener('click', () => {
+            if (!ytReady || !ytPlayer) return;
+            const state = ytPlayer.getPlayerState();
+            if (state === YT.PlayerState.PLAYING) {
+                ytPlayer.pauseVideo();
+            } else {
+                ytPlayer.playVideo();
+            }
+        });
+
+        document.getElementById('ytCloseBtn').addEventListener('click', () => {
+            closePlayer();
+            activeShowIdx = null;
+            activeArtistName = null;
+        });
+
+        document.getElementById('ytToggleVideo').addEventListener('click', () => {
+            const wrap = document.getElementById('ytVideoWrap');
+            const btn = document.getElementById('ytToggleVideo');
+            if (videoShown) {
+                wrap.classList.remove('expanded');
+                wrap.classList.add('collapsed');
+                btn.title = 'Show video';
+                btn.textContent = '▪';
+                videoShown = false;
+            } else {
+                wrap.classList.remove('collapsed');
+                wrap.classList.add('expanded');
+                btn.title = 'Hide video';
+                btn.textContent = '▫';
+                videoShown = true;
+            }
+        });
+
+        // ── Shows loading ─────────────────────────────────────────────────────
+        function fmt(dt) {
+            const d = new Date(dt);
+            const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+            const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+            return {
+                main: `${months[d.getMonth()]} ${d.getDate()}`,
+                sub: `${days[d.getDay()]} ${d.getFullYear()}`
+            };
+        }
+
+        function renderShows() {
+            const container = document.getElementById('showsContainer');
+            const meta = document.getElementById('showsMeta');
+
+            const filtered = allShows.filter(s => {
+                if (selectedVenueIds.size === 0) return true;
+                return selectedVenueIds.has(s.venueId);
+            });
+
+            meta.textContent = `${filtered.length} show${filtered.length !== 1 ? 's' : ''}`;
+
+            if (filtered.length === 0) {
+                container.innerHTML = '<div class="state-msg">No shows match the selected venues.</div>';
+                return;
+            }
+
+            const ul = document.createElement('ul');
+            ul.className = 'shows-list';
+
+            filtered.forEach((show, showIdx) => {
+                const globalIdx = allShows.indexOf(show);
+                const d = fmt(show.datetime);
+                const li = document.createElement('li');
+                li.className = 'show-item';
+                if (activeShowIdx === globalIdx) li.classList.add('show-item--playing');
+
+                // Date cell
+                const dateCell = document.createElement('div');
+                dateCell.className = 'show-date-cell';
+                if (show.firstArtistAvatarUrl) {
+                    const img = document.createElement('img');
+                    img.className = 'artist-avatar';
+                    img.src = show.firstArtistAvatarUrl;
+                    img.alt = show.artists[0] || '';
+                    img.loading = 'lazy';
+                    dateCell.appendChild(img);
+                }
+                const dateDiv = document.createElement('div');
+                dateDiv.className = 'show-date';
+                dateDiv.innerHTML = `<div class="date-main">${d.main}</div><div class="date-sub">${d.sub}</div>`;
+                dateCell.appendChild(dateDiv);
+                li.appendChild(dateCell);
+
+                // Artists cell
+                const artistsDiv = document.createElement('div');
+                artistsDiv.className = 'show-artists';
+                show.artists.forEach((name, aIdx) => {
+                    const chip = document.createElement('span');
+                    chip.className = 'artist-chip';
+
+                    const songs = artistTopSongs[name] || [];
+                    const hasSongs = songs.length > 0;
+
+                    if (hasSongs) {
+                        const btn = document.createElement('button');
+                        btn.className = 'play-btn';
+                        btn.dataset.idx = globalIdx;
+                        btn.title = `Play: ${songs[0]}`;
+                        btn.textContent = '▶';
+                        if (activeShowIdx === globalIdx && activeArtistName === name) {
+                            btn.classList.add('active');
+                        }
+                        btn.addEventListener('click', () => {
+                            if (activeShowIdx === globalIdx && activeArtistName === name) {
+                                // Toggle pause
+                                document.getElementById('ytPlayPauseBtn').click();
+                                return;
+                            }
+                            delete showFallbackState[globalIdx];
+                            searchAndPlay(globalIdx, name, songs[0]);
+                        });
+                        chip.appendChild(btn);
+                    }
+
+                    const nameSpan = document.createElement('span');
+                    nameSpan.textContent = name;
+                    if (!hasSongs) nameSpan.style.color = 'var(--text-secondary)';
+                    chip.appendChild(nameSpan);
+
+                    if (aIdx < show.artists.length - 1) {
+                        const sep = document.createElement('span');
+                        sep.textContent = '·';
+                        sep.style.cssText = 'color:var(--text-muted);font-weight:400;margin:0 2px';
+                        chip.appendChild(sep);
+                    }
+
+                    artistsDiv.appendChild(chip);
+                });
+                li.appendChild(artistsDiv);
+
+                // Venue cell
+                const venueDiv = document.createElement('div');
+                venueDiv.className = 'show-venue-name';
+                venueDiv.textContent = show.venue;
+                li.appendChild(venueDiv);
+
+                ul.appendChild(li);
+            });
+
+            container.innerHTML = '';
+            container.appendChild(ul);
+        }
+
+        function buildVenueFilter() {
+            const venueMap = new Map();
+            allShows.forEach(s => {
+                if (!venueMap.has(s.venueId)) venueMap.set(s.venueId, s.venue);
+            });
+            venues = Array.from(venueMap.entries()).map(([id, name]) => ({ id, name }));
+            venues.sort((a, b) => a.name.localeCompare(b.name));
+            selectedVenueIds = new Set(venues.map(v => v.id));
+
+            const checkboxes = document.getElementById('venueCheckboxes');
+            checkboxes.innerHTML = '';
+            venues.forEach(v => {
+                const row = document.createElement('div');
+                row.className = 'venue-item';
+                const cb = document.createElement('input');
+                cb.type = 'checkbox';
+                cb.id = `vc-${v.id}`;
+                cb.checked = true;
+                cb.addEventListener('change', () => {
+                    if (cb.checked) selectedVenueIds.add(v.id);
+                    else selectedVenueIds.delete(v.id);
+                    updateDropdownLabel();
+                    renderShows();
+                });
+                const lbl = document.createElement('label');
+                lbl.htmlFor = `vc-${v.id}`;
+                lbl.textContent = v.name;
+                row.appendChild(cb); row.appendChild(lbl);
+                checkboxes.appendChild(row);
+            });
+
+            updateDropdownLabel();
+        }
+
+        function updateDropdownLabel() {
+            const lbl = document.getElementById('dropdownLabel');
+            if (selectedVenueIds.size === venues.length) lbl.textContent = 'All Venues';
+            else if (selectedVenueIds.size === 0) lbl.textContent = 'No Venues';
+            else lbl.textContent = `${selectedVenueIds.size} of ${venues.length} venues`;
+        }
+
+        // Dropdown toggle
+        const trigger = document.getElementById('dropdownTrigger');
+        const panel = document.getElementById('dropdownPanel');
+        trigger.addEventListener('click', () => {
+            const open = panel.classList.toggle('open');
+            trigger.classList.toggle('open', open);
+        });
+        document.addEventListener('click', e => {
+            if (!document.getElementById('dropdownWrapper').contains(e.target)) {
+                panel.classList.remove('open');
+                trigger.classList.remove('open');
+            }
+        });
+        document.getElementById('selectAllBtn').addEventListener('click', () => {
+            venues.forEach(v => {
+                selectedVenueIds.add(v.id);
+                const cb = document.getElementById(`vc-${v.id}`);
+                if (cb) cb.checked = true;
+            });
+            updateDropdownLabel(); renderShows();
+        });
+        document.getElementById('clearAllBtn').addEventListener('click', () => {
+            selectedVenueIds.clear();
+            venues.forEach(v => {
+                const cb = document.getElementById(`vc-${v.id}`);
+                if (cb) cb.checked = false;
+            });
+            updateDropdownLabel(); renderShows();
+        });
+
+        // ── Fetch shows ───────────────────────────────────────────────────────
+        async function loadShows() {
+            const container = document.getElementById('showsContainer');
+            container.innerHTML = '<div class="state-msg"><span class="loading-dots">Loading</span></div>';
+
+            try {
+                const resp = await fetch('/api/shows/Atlanta');
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                const data = await resp.json();
+
+                allShows = data.shows || [];
+                artistTopSongs = data.artistTopSongs || {};
+
+                if (allShows.length === 0) {
+                    container.innerHTML = '<div class="state-msg">No upcoming shows found.</div>';
+                    return;
+                }
+
+                const noSongsCount = allShows.filter(s =>
+                    s.artists.every(name => !(artistTopSongs[name] || []).length)
+                ).length;
+
+                if (noSongsCount > 0 && Object.keys(artistTopSongs).length === 0) {
+                    document.getElementById('ytStatusNote').textContent =
+                        '▶ Song data not yet scraped — run "Check for Updates" on the main page';
+                }
+
+                buildVenueFilter();
+                renderShows();
+            } catch (e) {
+                container.innerHTML = '<div class="state-msg error">Failed to load shows. Please try again later.</div>';
+            }
+        }
+
+        loadShows();
+    })();
+    </script>
+
+    <!-- YouTube IFrame API -->
+    <script src="https://www.youtube.com/iframe_api"></script>
+</body>
+</html>
