@@ -185,6 +185,91 @@
             margin-bottom: 16px;
         }
 
+        .section-divider {
+            border: none;
+            border-top: 1px solid #2a2a2a;
+            margin: 32px 0 24px;
+        }
+
+        .video-report-card {
+            background: #1c1c1c;
+            border: 1px solid #2a2a2a;
+            border-radius: 8px;
+            padding: 16px 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+
+        .video-report-top {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .video-report-info { flex: 1; min-width: 0; }
+
+        .video-artist {
+            font-size: 15px; font-weight: 600; color: #fff;
+        }
+
+        .video-id-link {
+            font-size: 12px; color: #777; font-family: monospace;
+            text-decoration: none;
+        }
+        .video-id-link:hover { color: #1db954; }
+
+        .video-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .video-actions input {
+            background: #222; color: #f0f0f0;
+            border: 1px solid #444; border-radius: 4px;
+            padding: 5px 9px; font-size: 13px; font-family: monospace;
+            width: 160px;
+        }
+        .video-actions input:focus { outline: 2px solid #1db954; }
+
+        .set-video-btn {
+            background: #1db954; color: #000;
+            border: none; border-radius: 4px;
+            padding: 6px 12px; font-size: 13px; font-weight: 600;
+            cursor: pointer;
+        }
+        .set-video-btn:hover { background: #17a349; }
+        .set-video-btn:disabled { background: #444; color: #888; cursor: default; }
+
+        .block-video-btn {
+            background: #c0392b; color: #fff;
+            border: none; border-radius: 4px;
+            padding: 6px 12px; font-size: 13px; font-weight: 600;
+            cursor: pointer;
+        }
+        .block-video-btn:hover { background: #e74c3c; }
+        .block-video-btn:disabled { background: #444; color: #888; cursor: default; }
+
+        .clear-override-btn {
+            background: none; color: #888;
+            border: 1px solid #444; border-radius: 4px;
+            padding: 6px 10px; font-size: 12px;
+            cursor: pointer;
+        }
+        .clear-override-btn:hover { border-color: #666; color: #bbb; }
+
+        .override-badge {
+            font-size: 11px; font-weight: 700;
+            padding: 2px 8px; border-radius: 10px;
+            white-space: nowrap;
+        }
+        .override-badge.blocked { background: #c0392b33; color: #e74c3c; border: 1px solid #c0392b55; }
+        .override-badge.custom { background: #1db95433; color: #1db954; border: 1px solid #1db95455; }
+
         @media (max-width: 520px) {
             .page-card { padding: 20px 16px 32px; }
             .notification-card { flex-wrap: wrap; }
@@ -206,6 +291,16 @@
 
         <div id="notificationsContainer">
             <div class="loading-state">Loading reports&hellip;</div>
+        </div>
+
+        <hr class="section-divider">
+
+        <div class="header-actions">
+            <div class="section-title" style="margin-bottom:0;">Video Reports</div>
+            <button class="refresh-btn" id="refreshVideoBtn">&#8635; Refresh</button>
+        </div>
+        <div id="videoReportsContainer">
+            <div class="loading-state">Loading video reports&hellip;</div>
         </div>
     </div>
 
@@ -310,7 +405,192 @@
 
         document.getElementById('refreshBtn').addEventListener('click', loadReports);
 
+        // ── Video reports ─────────────────────────────────────────────────────
+
+        let overridesCache = {};
+
+        async function loadVideoReports() {
+            const container = document.getElementById('videoReportsContainer');
+            container.innerHTML = '<div class="loading-state">Loading video reports&hellip;</div>';
+
+            try {
+                const [reportsRes, overridesRes] = await Promise.all([
+                    fetch('/api/video-reports'),
+                    fetch('/api/youtube-overrides')
+                ]);
+
+                if (reportsRes.status === 403) {
+                    container.innerHTML = '<div class="empty-state"><div class="icon">🔒</div>Access denied.</div>';
+                    return;
+                }
+                if (!reportsRes.ok) throw new Error(`HTTP ${reportsRes.status}`);
+
+                const reports = await reportsRes.json();
+                const overrides = overridesRes.ok ? await overridesRes.json() : [];
+                overridesCache = {};
+                overrides.forEach(o => { overridesCache[o.artist_name] = o; });
+
+                if (reports.length === 0 && overrides.length === 0) {
+                    container.innerHTML = '<div class="empty-state"><div class="icon">✅</div>No video reports.</div>';
+                    return;
+                }
+
+                // Merge: all reported artists + any with overrides
+                const artistsSet = new Set(reports.map(r => r.artistName));
+                overrides.forEach(o => artistsSet.add(o.artist_name));
+                const allArtists = [...artistsSet];
+
+                // Map reports by artist
+                const reportsByArtist = {};
+                reports.forEach(r => {
+                    if (!reportsByArtist[r.artistName]) reportsByArtist[r.artistName] = [];
+                    reportsByArtist[r.artistName].push(r);
+                });
+
+                container.innerHTML = '';
+                allArtists.forEach(artist => {
+                    const artistReports = reportsByArtist[artist] || [];
+                    const override = overridesCache[artist];
+                    renderVideoCard(container, artist, artistReports, override);
+                });
+            } catch (err) {
+                container.innerHTML = `<div class="empty-state"><div class="icon">⚠️</div>Failed to load.<br><small style="color:#555">${err.message}</small></div>`;
+            }
+        }
+
+        function renderVideoCard(container, artist, reports, override) {
+            const card = document.createElement('div');
+            card.className = 'video-report-card';
+            card.dataset.artist = artist;
+
+            const top = document.createElement('div');
+            top.className = 'video-report-top';
+
+            const info = document.createElement('div');
+            info.className = 'video-report-info';
+
+            const nameEl = document.createElement('div');
+            nameEl.className = 'video-artist';
+            nameEl.textContent = artist;
+            info.appendChild(nameEl);
+
+            if (reports.length > 0) {
+                const meta = document.createElement('div');
+                meta.style.cssText = 'font-size:12px;color:#777;margin-top:3px;';
+                const topReport = reports[0];
+                const ytLink = document.createElement('a');
+                ytLink.className = 'video-id-link';
+                ytLink.href = `https://www.youtube.com/watch?v=${topReport.videoId}`;
+                ytLink.target = '_blank';
+                ytLink.rel = 'noopener noreferrer';
+                ytLink.textContent = topReport.videoId;
+                meta.appendChild(ytLink);
+                const countSpan = document.createElement('span');
+                countSpan.style.color = '#555';
+                countSpan.textContent = ` · ${reports.reduce((s, r) => s + r.count, 0)} report${reports.reduce((s,r)=>s+r.count,0)===1?'':'s'}`;
+                meta.appendChild(countSpan);
+                info.appendChild(meta);
+            }
+
+            top.appendChild(info);
+
+            if (override) {
+                const badge = document.createElement('span');
+                badge.className = 'override-badge ' + (override.removed ? 'blocked' : 'custom');
+                badge.textContent = override.removed ? 'Blocked' : `Custom: ${override.video_id}`;
+                top.appendChild(badge);
+            }
+
+            card.appendChild(top);
+
+            // Actions row
+            const actions = document.createElement('div');
+            actions.className = 'video-actions';
+
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.placeholder = 'YouTube video ID';
+            input.maxLength = 20;
+            if (override && !override.removed && override.video_id) input.value = override.video_id;
+            actions.appendChild(input);
+
+            const setBtn = document.createElement('button');
+            setBtn.className = 'set-video-btn';
+            setBtn.textContent = 'Set Video';
+            setBtn.addEventListener('click', async () => {
+                const vid = input.value.trim();
+                if (!vid) return;
+                setBtn.disabled = true;
+                setBtn.textContent = 'Saving…';
+                try {
+                    const res = await fetch('/api/youtube-overrides', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ artistName: artist, videoId: vid, removed: false })
+                    });
+                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                    overridesCache[artist] = { artist_name: artist, video_id: vid, removed: false };
+                    card.remove();
+                    renderVideoCard(container, artist, reports, overridesCache[artist]);
+                    container.insertBefore(container.lastElementChild, container.firstElementChild);
+                } catch (err) { alert('Failed: ' + err.message); }
+                setBtn.disabled = false;
+                setBtn.textContent = 'Set Video';
+            });
+            actions.appendChild(setBtn);
+
+            const blockBtn = document.createElement('button');
+            blockBtn.className = 'block-video-btn';
+            blockBtn.textContent = 'Block Video';
+            blockBtn.addEventListener('click', async () => {
+                if (!confirm(`Block all YouTube videos for "${artist}"?`)) return;
+                blockBtn.disabled = true;
+                blockBtn.textContent = 'Blocking…';
+                try {
+                    const res = await fetch('/api/youtube-overrides', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ artistName: artist, removed: true })
+                    });
+                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                    overridesCache[artist] = { artist_name: artist, video_id: null, removed: true };
+                    card.remove();
+                    renderVideoCard(container, artist, reports, overridesCache[artist]);
+                    container.insertBefore(container.lastElementChild, container.firstElementChild);
+                } catch (err) { alert('Failed: ' + err.message); }
+                blockBtn.disabled = false;
+                blockBtn.textContent = 'Block Video';
+            });
+            actions.appendChild(blockBtn);
+
+            if (override) {
+                const clearBtn = document.createElement('button');
+                clearBtn.className = 'clear-override-btn';
+                clearBtn.textContent = 'Clear Override';
+                clearBtn.addEventListener('click', async () => {
+                    clearBtn.disabled = true;
+                    try {
+                        const res = await fetch(`/api/youtube-overrides/${encodeURIComponent(artist)}`, { method: 'DELETE' });
+                        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                        delete overridesCache[artist];
+                        card.remove();
+                        if (reports.length > 0) {
+                            renderVideoCard(container, artist, reports, null);
+                            container.appendChild(container.lastElementChild);
+                        }
+                    } catch (err) { alert('Failed: ' + err.message); clearBtn.disabled = false; }
+                });
+                actions.appendChild(clearBtn);
+            }
+
+            card.appendChild(actions);
+            container.appendChild(card);
+        }
+
+        document.getElementById('refreshVideoBtn').addEventListener('click', loadVideoReports);
+
         loadReports();
+        loadVideoReports();
     </script>
 </body>
 </html>

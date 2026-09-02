@@ -147,7 +147,21 @@ async function youtubeSearchScrape(q: string): Promise<string | null> {
 
 app.get('/api/youtube-search', async (req: any, res: any) => {
   const q = req.query.q as string;
+  const artist = (req.query.artist as string || '').trim();
   if (!q) return res.status(400).json({ error: 'Missing query' });
+
+  // Check for a manual override / removal for this artist
+  if (artist) {
+    const { data: override } = await supabase
+        .from('youtube_overrides')
+        .select('video_id, removed')
+        .eq('artist_name', artist)
+        .maybeSingle();
+    if (override) {
+      if (override.removed) return res.json({ videoId: null, overridden: true });
+      if (override.video_id) return res.json({ videoId: override.video_id, overridden: true });
+    }
+  }
 
   const apiKey = process.env.YOUTUBE_API_KEY;
 
@@ -389,6 +403,74 @@ app.get('/api/venue-reports', requireAdmin, async (req, res) => {
 app.get('/api/is-admin', async (req, res) => {
     const userId = await getSpotifyUserId(req);
     res.json({ isAdmin: userId === ADMIN_SPOTIFY_ID });
+});
+
+// ── Video reports ────────────────────────────────────────────────────────────
+
+app.post('/api/video-reports', async (req, res) => {
+    const userId = await getSpotifyUserId(req);
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+    const { artistName, videoId } = req.body;
+    if (!artistName || !videoId) return res.status(400).json({ error: 'Missing artistName or videoId' });
+
+    const { error } = await supabase.from('video_reports').upsert(
+        { artist_name: artistName, video_id: videoId, reporter_id: userId },
+        { onConflict: 'artist_name,video_id,reporter_id', ignoreDuplicates: true }
+    );
+    if (error) return res.status(500).json({ error: error.message });
+    res.json({ ok: true });
+});
+
+app.get('/api/video-reports', requireAdmin, async (req, res) => {
+    const { data, error } = await supabase
+        .from('video_reports')
+        .select('artist_name, video_id, reporter_id, created_at')
+        .order('created_at', { ascending: false });
+
+    if (error) return res.status(500).json({ error: error.message });
+
+    const grouped: Record<string, any> = {};
+    (data || []).forEach((r: any) => {
+        const key = `${r.artist_name}::${r.video_id}`;
+        if (!grouped[key]) {
+            grouped[key] = { artistName: r.artist_name, videoId: r.video_id, count: 0, latestAt: r.created_at };
+        }
+        grouped[key].count++;
+        if (r.created_at > grouped[key].latestAt) grouped[key].latestAt = r.created_at;
+    });
+
+    res.json(Object.values(grouped).sort((a: any, b: any) => b.count - a.count));
+});
+
+// ── YouTube overrides ─────────────────────────────────────────────────────────
+
+app.get('/api/youtube-overrides', requireAdmin, async (req, res) => {
+    const { data, error } = await supabase
+        .from('youtube_overrides')
+        .select('artist_name, video_id, removed, updated_at')
+        .order('updated_at', { ascending: false });
+    if (error) return res.status(500).json({ error: error.message });
+    res.json(data || []);
+});
+
+app.post('/api/youtube-overrides', requireAdmin, async (req, res) => {
+    const { artistName, videoId, removed } = req.body;
+    if (!artistName) return res.status(400).json({ error: 'Missing artistName' });
+
+    const { error } = await supabase.from('youtube_overrides').upsert(
+        { artist_name: artistName, video_id: videoId || null, removed: !!removed, updated_at: new Date().toISOString() },
+        { onConflict: 'artist_name' }
+    );
+    if (error) return res.status(500).json({ error: error.message });
+    res.json({ ok: true });
+});
+
+app.delete('/api/youtube-overrides/:artistName', requireAdmin, async (req, res) => {
+    const artistName = decodeURIComponent(req.params.artistName);
+    const { error } = await supabase.from('youtube_overrides').delete().eq('artist_name', artistName);
+    if (error) return res.status(500).json({ error: error.message });
+    res.json({ ok: true });
 });
 
 // ── Admin page ───────────────────────────────────────────────────────────────
