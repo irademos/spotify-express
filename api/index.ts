@@ -16,6 +16,25 @@ const supabase = createClient(
   process.env.SUPABASE_ANON_KEY
 );
 
+const ADMIN_SPOTIFY_ID = 'christafariii';
+
+async function getSpotifyUserId(req: any): Promise<string | null> {
+    const token = req.cookies.spotifyAccessToken;
+    if (!token) return null;
+    try {
+        const meRes = await axios.get('https://api.spotify.com/v1/me', {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+        return meRes.data.id || null;
+    } catch { return null; }
+}
+
+async function requireAdmin(req: any, res: any, next: any) {
+    const userId = await getSpotifyUserId(req);
+    if (userId !== ADMIN_SPOTIFY_ID) return res.status(403).json({ error: 'Forbidden' });
+    next();
+}
+
 app.use(cookieParser());
 app.use(bodyParser.json());
 
@@ -263,7 +282,7 @@ app.post('/api/city-venues/:city/venues', async (req, res) => {
     res.json({ ok: true });
 });
 
-app.delete('/api/city-venues/:city/venues/:venueId', async (req, res) => {
+app.delete('/api/city-venues/:city/venues/:venueId', requireAdmin, async (req, res) => {
     const city = decodeURIComponent(req.params.city);
     const venueId = decodeURIComponent(req.params.venueId);
 
@@ -274,7 +293,62 @@ app.delete('/api/city-venues/:city/venues/:venueId', async (req, res) => {
     const { error: upErr } = await supabase.from('city_venues')
         .update({ venues, updated_at: new Date().toISOString() }).eq('city', city);
     if (upErr) return res.status(500).json({ error: upErr.message });
+
+    // Clear reports for this venue now that it's been removed
+    await supabase.from('venue_reports').delete().eq('city', city).eq('venue_id', venueId);
+
     res.json({ ok: true });
+});
+
+// ── Venue reports ────────────────────────────────────────────────────────────
+
+app.post('/api/venue-reports', async (req, res) => {
+    const userId = await getSpotifyUserId(req);
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+    const { city, venueId, venueName } = req.body;
+    if (!city || !venueId) return res.status(400).json({ error: 'Missing city or venueId' });
+
+    const { error } = await supabase.from('venue_reports').upsert(
+        { city, venue_id: venueId, venue_name: venueName || null, reporter_id: userId },
+        { onConflict: 'city,venue_id,reporter_id', ignoreDuplicates: true }
+    );
+    if (error) return res.status(500).json({ error: error.message });
+    res.json({ ok: true });
+});
+
+app.get('/api/venue-reports', requireAdmin, async (req, res) => {
+    const { data, error } = await supabase
+        .from('venue_reports')
+        .select('city, venue_id, venue_name, reporter_id, created_at')
+        .order('created_at', { ascending: false });
+
+    if (error) return res.status(500).json({ error: error.message });
+
+    const grouped: Record<string, any> = {};
+    (data || []).forEach((r: any) => {
+        const key = `${r.city}::${r.venue_id}`;
+        if (!grouped[key]) {
+            grouped[key] = { city: r.city, venueId: r.venue_id, venueName: r.venue_name, count: 0, latestAt: r.created_at };
+        }
+        grouped[key].count++;
+        if (r.created_at > grouped[key].latestAt) grouped[key].latestAt = r.created_at;
+    });
+
+    res.json(Object.values(grouped).sort((a: any, b: any) => b.count - a.count));
+});
+
+app.get('/api/is-admin', async (req, res) => {
+    const userId = await getSpotifyUserId(req);
+    res.json({ isAdmin: userId === ADMIN_SPOTIFY_ID });
+});
+
+// ── Admin page ───────────────────────────────────────────────────────────────
+
+app.get('/admin', requireSpotifyAuth, async (req: any, res: any) => {
+    const userId = await getSpotifyUserId(req);
+    if (userId !== ADMIN_SPOTIFY_ID) return res.status(403).send('Forbidden');
+    res.sendFile(path.join(__dirname, '..', 'components', 'admin.htm'));
 });
 
 app.post('/api/trigger-scrape', async (req, res) => {

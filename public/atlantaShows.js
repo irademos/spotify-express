@@ -3,6 +3,7 @@ document.addEventListener('DOMContentLoaded', function () {
     let allApiVenues = [];
     let venues = [];
     let selectedVenueIds = new Set();
+    let reportedVenueIds = new Set(); // venues this user has already reported
 
     // ── City / scraping venue config ────────────────────────────────────────
     let cityVenueData = []; // [{city, venues:[{id,name}]}]
@@ -60,18 +61,20 @@ document.addEventListener('DOMContentLoaded', function () {
             idSpan.textContent = v.id;
             idSpan.title = v.id;
 
-            const removeBtn = document.createElement('button');
-            removeBtn.className = 'remove-venue-btn';
-            removeBtn.textContent = '×';
-            removeBtn.title = 'Remove venue';
-            removeBtn.addEventListener('click', (e) => {
+            const reportBtn = document.createElement('button');
+            reportBtn.className = 'report-venue-btn';
+            const alreadyReported = reportedVenueIds.has(v.id);
+            reportBtn.textContent = alreadyReported ? '✓' : '⚑';
+            reportBtn.title = alreadyReported ? 'Already reported' : 'Report venue';
+            reportBtn.disabled = alreadyReported;
+            reportBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                removeVenueFromCity(selectedCity, v.id);
+                reportVenue(selectedCity, v.id, v.name);
             });
 
             row.appendChild(name);
             row.appendChild(idSpan);
-            row.appendChild(removeBtn);
+            row.appendChild(reportBtn);
             list.appendChild(row);
         });
 
@@ -109,17 +112,18 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
-    async function removeVenueFromCity(city, venueId) {
+    async function reportVenue(city, venueId, venueName) {
         try {
-            const res = await fetch(`/api/city-venues/${encodeURIComponent(city)}/venues/${encodeURIComponent(venueId)}`, {
-                method: 'DELETE'
+            const res = await fetch('/api/venue-reports', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ city, venueId, venueName })
             });
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            const entry = cityVenueData.find(e => e.city === city);
-            if (entry) entry.venues = entry.venues.filter(v => v.id !== venueId);
+            reportedVenueIds.add(venueId);
             renderScrapeVenues();
         } catch (err) {
-            alert('Failed to remove venue: ' + err.message);
+            alert('Failed to report venue: ' + err.message);
         }
     }
 
@@ -269,6 +273,11 @@ document.addEventListener('DOMContentLoaded', function () {
     addVenueInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') submitAddVenue(); });
 
     loadCityVenues();
+
+    // Show admin link if this user is admin
+    fetch('/api/is-admin').then(r => r.json()).then(d => {
+        if (d.isAdmin) document.getElementById('adminLink').style.display = '';
+    }).catch(() => {});
 
     // Trigger scrape GitHub Action
     document.getElementById('triggerScrapeBtn').addEventListener('click', async function () {

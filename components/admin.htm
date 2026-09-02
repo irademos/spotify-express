@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin — Venue Reports</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            background-color: #0a0a0a;
+            min-height: 100vh;
+            padding: 32px 16px;
+            color: #f0f0f0;
+        }
+
+        .page-card {
+            max-width: 760px;
+            margin: 0 auto;
+            background: #141414;
+            border-radius: 10px;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.5);
+            padding: 32px 32px 48px;
+        }
+
+        .page-header {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 32px;
+        }
+
+        .page-header h1 {
+            font-size: 1.6rem;
+            color: #fff;
+            font-weight: 700;
+        }
+
+        .badge {
+            background: #1db954;
+            color: #000;
+            font-size: 11px;
+            font-weight: 700;
+            padding: 3px 8px;
+            border-radius: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        button {
+            padding: 8px 16px;
+            background-color: #222;
+            color: #f0f0f0;
+            border: 1px solid #333;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: background 0.15s;
+        }
+        button:hover { background-color: #333; }
+
+        .back-btn { padding: 8px 14px; }
+
+        .section-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            margin-bottom: 16px;
+        }
+
+        /* Notifications */
+        .notifications-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .notification-card {
+            background: #1c1c1c;
+            border: 1px solid #2a2a2a;
+            border-radius: 8px;
+            padding: 16px 20px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .notification-card.high-reports {
+            border-color: #c0392b55;
+            background: #1c1414;
+        }
+
+        .notif-icon {
+            font-size: 22px;
+            flex-shrink: 0;
+        }
+
+        .notif-body {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .notif-venue {
+            font-size: 15px;
+            font-weight: 600;
+            color: #fff;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .notif-meta {
+            font-size: 12px;
+            color: #777;
+            margin-top: 3px;
+        }
+
+        .report-count {
+            font-size: 13px;
+            font-weight: 600;
+            color: #e74c3c;
+            background: #e74c3c18;
+            border: 1px solid #e74c3c33;
+            border-radius: 20px;
+            padding: 4px 12px;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+
+        .report-count.single {
+            color: #e67e22;
+            background: #e67e2218;
+            border-color: #e67e2233;
+        }
+
+        .delete-venue-btn {
+            background: #c0392b;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            padding: 7px 14px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            flex-shrink: 0;
+            transition: background 0.15s;
+        }
+        .delete-venue-btn:hover { background: #e74c3c; }
+        .delete-venue-btn:disabled { background: #444; color: #888; cursor: default; }
+
+        .empty-state {
+            text-align: center;
+            padding: 56px 20px;
+            color: #555;
+            font-size: 15px;
+        }
+
+        .empty-state .icon { font-size: 40px; margin-bottom: 12px; }
+
+        .loading-state {
+            text-align: center;
+            padding: 56px 20px;
+            color: #555;
+        }
+
+        .refresh-btn {
+            background: none;
+            border: 1px solid #333;
+            color: #888;
+            font-size: 12px;
+            padding: 5px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-left: auto;
+        }
+        .refresh-btn:hover { border-color: #555; color: #bbb; background: none; }
+
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+
+        @media (max-width: 520px) {
+            .page-card { padding: 20px 16px 32px; }
+            .notification-card { flex-wrap: wrap; }
+        }
+    </style>
+</head>
+<body>
+    <div class="page-card">
+        <div class="page-header">
+            <button class="back-btn" onclick="window.location.href='/upcoming-shows'">&#8592; Back</button>
+            <h1>Admin</h1>
+            <span class="badge">christafariii</span>
+        </div>
+
+        <div class="header-actions">
+            <div class="section-title" style="margin-bottom:0;">Reported Venues</div>
+            <button class="refresh-btn" id="refreshBtn">&#8635; Refresh</button>
+        </div>
+
+        <div id="notificationsContainer">
+            <div class="loading-state">Loading reports&hellip;</div>
+        </div>
+    </div>
+
+    <script>
+        async function loadReports() {
+            const container = document.getElementById('notificationsContainer');
+            container.innerHTML = '<div class="loading-state">Loading reports&hellip;</div>';
+
+            try {
+                const res = await fetch('/api/venue-reports');
+                if (res.status === 403) {
+                    container.innerHTML = '<div class="empty-state"><div class="icon">🔒</div>Access denied.</div>';
+                    return;
+                }
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const reports = await res.json();
+
+                if (reports.length === 0) {
+                    container.innerHTML = '<div class="empty-state"><div class="icon">✅</div>No venue reports — all clear.</div>';
+                    return;
+                }
+
+                const list = document.createElement('div');
+                list.className = 'notifications-list';
+
+                reports.forEach(r => {
+                    const card = document.createElement('div');
+                    card.className = 'notification-card' + (r.count >= 3 ? ' high-reports' : '');
+                    card.dataset.city = r.city;
+                    card.dataset.venueId = r.venueId;
+
+                    const icon = document.createElement('div');
+                    icon.className = 'notif-icon';
+                    icon.textContent = '⚑';
+
+                    const body = document.createElement('div');
+                    body.className = 'notif-body';
+
+                    const venueName = document.createElement('div');
+                    venueName.className = 'notif-venue';
+                    venueName.textContent = r.venueName || r.venueId;
+
+                    const meta = document.createElement('div');
+                    meta.className = 'notif-meta';
+                    meta.textContent = `${r.city} · ID: ${r.venueId}`;
+
+                    body.appendChild(venueName);
+                    body.appendChild(meta);
+
+                    const countBadge = document.createElement('div');
+                    countBadge.className = 'report-count' + (r.count === 1 ? ' single' : '');
+                    countBadge.textContent = r.count === 1 ? '1 report' : `${r.count} reports`;
+
+                    const deleteBtn = document.createElement('button');
+                    deleteBtn.className = 'delete-venue-btn';
+                    deleteBtn.textContent = 'Delete Venue';
+                    deleteBtn.addEventListener('click', () => deleteVenue(r.city, r.venueId, deleteBtn));
+
+                    card.appendChild(icon);
+                    card.appendChild(body);
+                    card.appendChild(countBadge);
+                    card.appendChild(deleteBtn);
+                    list.appendChild(card);
+                });
+
+                container.innerHTML = '';
+                container.appendChild(list);
+            } catch (err) {
+                container.innerHTML = `<div class="empty-state"><div class="icon">⚠️</div>Failed to load reports.<br><small style="color:#555">${err.message}</small></div>`;
+            }
+        }
+
+        async function deleteVenue(city, venueId, btn) {
+            if (!confirm(`Delete "${venueId}" from ${city}? This will also clear all reports for it.`)) return;
+            btn.disabled = true;
+            btn.textContent = 'Deleting…';
+            try {
+                const res = await fetch(`/api/city-venues/${encodeURIComponent(city)}/venues/${encodeURIComponent(venueId)}`, {
+                    method: 'DELETE'
+                });
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                // Remove the card
+                const card = btn.closest('.notification-card');
+                card.style.opacity = '0.4';
+                card.style.pointerEvents = 'none';
+                btn.textContent = 'Deleted';
+                setTimeout(() => { card.remove(); checkEmpty(); }, 600);
+            } catch (err) {
+                btn.disabled = false;
+                btn.textContent = 'Delete Venue';
+                alert('Failed to delete venue: ' + err.message);
+            }
+        }
+
+        function checkEmpty() {
+            const remaining = document.querySelectorAll('.notification-card').length;
+            if (remaining === 0) {
+                document.getElementById('notificationsContainer').innerHTML =
+                    '<div class="empty-state"><div class="icon">✅</div>No venue reports — all clear.</div>';
+            }
+        }
+
+        document.getElementById('refreshBtn').addEventListener('click', loadReports);
+
+        loadReports();
+    </script>
+</body>
+</html>
