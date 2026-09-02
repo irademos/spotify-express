@@ -97,6 +97,20 @@
         }
         .back-btn:hover { background: var(--surface-hover); }
 
+        .admin-link {
+            font-size: 12px; color: #1db954; text-decoration: none;
+            padding: 4px 10px;
+            border: 1px solid #1db954; border-radius: 4px; white-space: nowrap;
+        }
+        .admin-link:hover { background: #1db954; color: #fff; }
+
+        .report-venue-btn {
+            background: none; border: none; color: var(--text-muted);
+            cursor: pointer; font-size: 15px; line-height: 1; padding: 0 2px; flex-shrink: 0;
+        }
+        .report-venue-btn:hover:not(:disabled) { color: #e67e22; }
+        .report-venue-btn:disabled { color: #1db954; cursor: default; }
+
         .theme-toggle-btn {
             margin-left: auto;
             padding: 6px 12px;
@@ -495,6 +509,7 @@
         <div class="page-header">
             <a href="/" class="back-btn">&#8592; Back</a>
             <h1>Upcoming Shows</h1>
+            <a href="/admin" class="admin-link" id="adminLink" style="display:none;">Admin</a>
             <button class="theme-toggle-btn" id="themeToggle">☀ Light</button>
         </div>
 
@@ -579,6 +594,7 @@
             <div class="yt-header-btns">
                 <button class="yt-ctrl-btn accent" id="ytPlayPauseBtn" title="Play/Pause">⏸</button>
                 <button class="yt-ctrl-btn" id="ytToggleVideo" title="Show video">▪</button>
+                <button class="yt-ctrl-btn" id="ytReportVideoBtn" title="Report this video" style="font-size:13px;color:var(--text-muted);">⚑</button>
                 <button class="yt-ctrl-btn" id="ytCloseBtn" title="Close">✕</button>
             </div>
         </div>
@@ -638,6 +654,9 @@
 
         let cityVenueData = [];
         let selectedCity = 'Atlanta';
+        let reportedVenueIds = new Set();
+        let reportedVideoKeys = new Set(); // "artistName|videoId"
+        let activeVideoId = null;
 
         // ── Helpers ───────────────────────────────────────────────────────────
         function extractVenueId(raw) {
@@ -719,12 +738,41 @@
                 idSpan.textContent = v.id;
                 idSpan.title = v.id;
 
+                const reportBtn = document.createElement('button');
+                reportBtn.className = 'report-venue-btn';
+                const alreadyReported = reportedVenueIds.has(v.id);
+                reportBtn.textContent = alreadyReported ? '✓' : '⚑';
+                reportBtn.title = alreadyReported ? 'Already reported' : 'Report venue';
+                reportBtn.disabled = alreadyReported;
+                reportBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    reportVenue(selectedCity, v.id, v.name);
+                });
+
                 row.appendChild(name);
                 row.appendChild(idSpan);
+                row.appendChild(reportBtn);
                 list.appendChild(row);
             });
 
             countEl.textContent = `${cityVenues.length} venue${cityVenues.length !== 1 ? 's' : ''} in ${selectedCity}`;
+        }
+
+        async function reportVenue(city, venueId, venueName) {
+            try {
+                const res = await fetch('/api/venue-reports', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ city, venueId, venueName })
+                });
+                if (res.status === 401) { showToast('Sign in to report venues'); return; }
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                reportedVenueIds.add(venueId);
+                renderScrapeVenues();
+                showToast('Venue reported');
+            } catch (err) {
+                showToast('Failed to report venue');
+            }
         }
 
         function populateCitySelect() {
@@ -1083,7 +1131,7 @@
             let videoId = null;
             try {
                 const q = `${artistName} ${songName} official audio`;
-                const resp = await fetch(`/api/youtube-search?q=${encodeURIComponent(q)}`);
+                const resp = await fetch(`/api/youtube-search?q=${encodeURIComponent(q)}&artist=${encodeURIComponent(artistName)}`);
                 const data = await resp.json();
                 videoId = data.videoId || null;
             } catch (e) { videoId = null; }
@@ -1095,6 +1143,15 @@
             activeShowIdx    = showIdx;
             activeArtistName = artistName;
             activeArtistIdx  = (allShows[showIdx]?.artists ?? []).indexOf(artistName);
+            activeVideoId    = videoId;
+
+            const reportVideoBtn = document.getElementById('ytReportVideoBtn');
+            if (reportVideoBtn) {
+                const key = `${artistName}|${videoId}`;
+                reportVideoBtn.textContent = reportedVideoKeys.has(key) ? '✓' : '⚑';
+                reportVideoBtn.style.color = reportedVideoKeys.has(key) ? '#1db954' : 'var(--text-muted)';
+                reportVideoBtn.disabled = reportedVideoKeys.has(key);
+            }
 
             document.getElementById('ytArtistName').textContent = artistName;
             document.getElementById('ytSongName').textContent   = songName;
@@ -1121,6 +1178,30 @@
             activeShowIdx    = null;
             activeArtistName = null;
             activeArtistIdx  = null;
+        });
+
+        document.getElementById('ytReportVideoBtn').addEventListener('click', async () => {
+            if (!activeArtistName || !activeVideoId) return;
+            const key = `${activeArtistName}|${activeVideoId}`;
+            if (reportedVideoKeys.has(key)) return;
+            const btn = document.getElementById('ytReportVideoBtn');
+            btn.disabled = true;
+            try {
+                const res = await fetch('/api/video-reports', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ artistName: activeArtistName, videoId: activeVideoId })
+                });
+                if (res.status === 401) { showToast('Sign in to report videos'); btn.disabled = false; return; }
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                reportedVideoKeys.add(key);
+                btn.textContent = '✓';
+                btn.style.color = '#1db954';
+                showToast('Video reported');
+            } catch (err) {
+                showToast('Failed to report video');
+                btn.disabled = false;
+            }
         });
 
         document.getElementById('ytToggleVideo').addEventListener('click', () => {
@@ -1326,6 +1407,10 @@
         }
 
         // ── Init ──────────────────────────────────────────────────────────────
+        fetch('/api/is-admin').then(r => r.json()).then(d => {
+            if (d.isAdmin) document.getElementById('adminLink').style.display = '';
+        }).catch(() => {});
+
         loadCityVenues();
         loadShows(`/api/shows/${encodeURIComponent(selectedCity)}`);
     })();
