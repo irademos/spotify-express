@@ -29,7 +29,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function goToAtlantaShows() {
-        window.location.href = '/atlanta-shows';
+        window.location.href = '/upcoming-shows';
     }
 
     document.getElementById("autoPlaylist").addEventListener("click", goToAutoPlaylist);

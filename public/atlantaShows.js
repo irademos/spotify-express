@@ -75,7 +75,7 @@ document.addEventListener('DOMContentLoaded', function () {
             list.appendChild(row);
         });
 
-        countEl.textContent = `${cityVenues.length} venue${cityVenues.length !== 1 ? 's' : ''} configured for scraping`;
+        countEl.textContent = `${cityVenues.length} venue${cityVenues.length !== 1 ? 's' : ''} added to ${selectedCity}`;
     }
 
     function populateCitySelect() {
@@ -292,7 +292,7 @@ document.addEventListener('DOMContentLoaded', function () {
             status.style.color = '#c00';
         } finally {
             btn.disabled = false;
-            btn.textContent = '▶ Scrape Now';
+            btn.textContent = '▶ Check for Updates';
         }
     });
 
@@ -349,8 +349,19 @@ document.addEventListener('DOMContentLoaded', function () {
         return showKey(show) + '::artist::' + idx;
     }
 
+    function getTodayUtc() {
+        const now = new Date();
+        return Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+    }
+
+    function isUpcoming(show) {
+        const datePart = show.datetime.split('T')[0];
+        const [year, month, day] = datePart.split('-').map(Number);
+        return Date.UTC(year, month - 1, day) >= getTodayUtc();
+    }
+
     function getVisibleShows() {
-        return allShows.filter(s => selectedVenueIds.has(s.venueId));
+        return allShows.filter(s => selectedVenueIds.has(s.venueId) && isUpcoming(s));
     }
 
     function updateAllPlayButtons() {
@@ -502,7 +513,7 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 
     document.getElementById('backBtn').addEventListener('click', () => {
-        window.location.href = '/dashboard';
+        window.location.href = '/upcoming-shows';
     });
 
     // Dropdown open/close
@@ -622,7 +633,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const container = document.getElementById('showsContainer');
         const meta = document.getElementById('showsMeta');
 
-        const visible = allShows.filter(s => selectedVenueIds.has(s.venueId));
+        const visible = allShows.filter(s => selectedVenueIds.has(s.venueId) && isUpcoming(s));
 
         if (visible.length === 0) {
             meta.textContent = '';
@@ -630,7 +641,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 container.innerHTML = `
                     <div class="state-msg">
                         No shows loaded yet — Spotify's API is still being explored.<br>
-                        <a href="/atlanta-shows?refresh=1" class="retry-link">Retry</a>
+                        <a href="/upcoming-shows?refresh=1" class="retry-link">Retry</a>
                     </div>`;
             } else {
                 container.innerHTML = '<div class="state-msg">No shows match the selected venues.</div>';
@@ -795,7 +806,7 @@ document.addEventListener('DOMContentLoaded', function () {
             .catch(err => {
                 document.getElementById('showsContainer').innerHTML =
                     `<div class="state-msg error">Failed to load shows.<br><small>${escHtml(err.message)}</small><br>
-                     <a href="/atlanta-shows?refresh=1" class="retry-link">Retry</a></div>`;
+                     <a href="/upcoming-shows?refresh=1" class="retry-link">Retry</a></div>`;
             });
     }
 

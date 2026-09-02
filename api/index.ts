@@ -80,7 +80,7 @@ app.get('/callback', async function (req, res) {
         if (refresh_token) {
             res.cookie('spotifyRefreshToken', refresh_token, { maxAge: 30 * 24 * 60 * 60 * 1000, path: '/' });
         }
-        res.redirect('/dashboard');
+        res.redirect('/upcoming-shows');
     } catch (err: any) {
         console.error('Token exchange failed:', err.response?.data || err.message);
         res.redirect('/?error=token_exchange_failed');
@@ -101,6 +101,10 @@ app.get('/ai-dj', requireSpotifyAuth, function (req: any, res: any) {
 });
 
 app.get('/atlanta-shows', requireSpotifyAuth, function (req: any, res: any) {
+  res.redirect('/upcoming-shows');
+});
+
+app.get('/upcoming-shows', requireSpotifyAuth, function (req: any, res: any) {
   res.sendFile(path.join(__dirname, '..', 'components', 'atlantaShows.htm'));
 });
 
