@@ -521,6 +521,7 @@
                     <option value="Atlanta">Atlanta</option>
                 </select>
                 <button class="add-btn" id="addCityBtn" title="Add new city">+</button>
+                <button class="report-venue-btn" id="reportCityBtn" title="Report city">⚑</button>
                 <div class="inline-add" id="addCityInline">
                     <input type="text" id="addCityInput" placeholder="City name" maxlength="80">
                     <button class="inline-confirm-btn" id="addCityConfirm">Add</button>
@@ -765,7 +766,6 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ city, venueId, venueName })
                 });
-                if (res.status === 401) { showToast('Sign in to report venues'); return; }
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
                 reportedVenueIds.add(venueId);
                 renderScrapeVenues();
@@ -773,6 +773,33 @@
             } catch (err) {
                 showToast('Failed to report venue');
             }
+        }
+
+        let reportedCities = new Set();
+
+        async function reportCity(city) {
+            try {
+                const res = await fetch('/api/city-reports', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ city })
+                });
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                reportedCities.add(city);
+                updateCityReportBtn();
+                showToast('City reported');
+            } catch (err) {
+                showToast('Failed to report city');
+            }
+        }
+
+        function updateCityReportBtn() {
+            const btn = document.getElementById('reportCityBtn');
+            if (!btn) return;
+            const already = reportedCities.has(selectedCity);
+            btn.textContent = already ? '✓' : '⚑';
+            btn.title = already ? 'Already reported' : 'Report city';
+            btn.disabled = already;
         }
 
         function populateCitySelect() {
@@ -797,6 +824,7 @@
                 cityVenueData = await res.json();
                 populateCitySelect();
                 renderScrapeVenues();
+                updateCityReportBtn();
             } catch (err) {
                 console.error('Failed to load city venues:', err);
                 document.getElementById('scrapeLabel').textContent = 'Error loading';
@@ -834,7 +862,13 @@
         document.getElementById('citySelect').addEventListener('change', function () {
             selectedCity = this.value;
             renderScrapeVenues();
+            updateCityReportBtn();
             loadShows(`/api/shows/${encodeURIComponent(selectedCity)}`);
+        });
+
+        // Report city button
+        document.getElementById('reportCityBtn').addEventListener('click', () => {
+            if (selectedCity) reportCity(selectedCity);
         });
 
         // Scrape venues dropdown
@@ -1192,7 +1226,6 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ artistName: activeArtistName, videoId: activeVideoId })
                 });
-                if (res.status === 401) { showToast('Sign in to report videos'); btn.disabled = false; return; }
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
                 reportedVideoKeys.add(key);
                 btn.textContent = '✓';
