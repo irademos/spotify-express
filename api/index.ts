@@ -184,6 +184,8 @@ function parseHumanDuration(s: string): number {
 // Returns an additive bonus in the range [-0.15, +0.10].
 function scoreUploadType(title: string): number {
   const t = title.toLowerCase();
+  if (/full album|album stream/.test(t))      return -0.60; // definitely not a single song
+  if (/full set|\bfull show\b/.test(t))       return -0.50;
   if (/official music video|\bomv\b/.test(t)) return -0.15; // typically Vevo, non-embeddable
   if (/official audio/.test(t))               return  0.10; // artist channel, always embeddable
   if (/official visuali[sz]er/.test(t))       return  0.08;
