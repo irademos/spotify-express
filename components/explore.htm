@@ -489,7 +489,7 @@
         .date-link:hover .date-main { color: #1db954; }
 
         @media (max-width: 600px) {
-            body { padding: 12px 8px 140px; }
+            body { padding: 12px 8px 160px; }
 
             .page-card { padding: 16px 14px 32px; border-radius: 6px; }
 
@@ -505,24 +505,45 @@
             .config-row { gap: 8px; }
             #triggerScrapeBtn { font-size: 12px; padding: 5px 9px; }
 
-            .show-item { grid-template-columns: 104px 1fr; gap: 8px; padding: 12px 0; }
+            /* Show item: date col | (venue top-right, artists below) */
+            .show-item {
+                grid-template-columns: 104px 1fr;
+                grid-template-areas:
+                    "date venue"
+                    "date artists";
+                gap: 6px 8px;
+                padding: 12px 0;
+            }
             .show-item--playing { padding-left: 6px; padding-right: 6px; }
-            .show-venue-name { text-align: left; grid-column: 2; margin-top: -6px; font-size: 12px; }
+            .show-date-cell { grid-area: date; }
+            .show-artists {
+                grid-area: artists;
+                flex-direction: column;
+                align-items: flex-start;
+                font-size: 14px;
+                gap: 5px;
+            }
+            .show-artists .artist-chip-sep { display: none; }
+            .show-venue-name {
+                grid-area: venue;
+                text-align: right;
+                align-self: start;
+                font-size: 12px;
+                margin-top: 0;
+                justify-content: flex-end;
+            }
             .artist-avatar { width: 30px; height: 30px; }
             .show-date .date-main { font-size: 15px; }
-            .show-artists { font-size: 14px; gap: 4px; }
             .play-btn { width: 24px; height: 24px; min-width: 24px; font-size: 10px; }
 
-            /* Center the floating player on mobile */
+            /* Floating player — centered, full width */
             #yt-player-card {
                 left: 12px;
                 right: 12px;
                 width: auto;
                 bottom: 12px;
             }
-            #yt-iframe-container { width: 100%; height: 0; padding-bottom: 56.25%; position: relative; }
-            #yt-iframe-container iframe { position: absolute; inset: 0; width: 100%; height: 100%; }
-            .yt-video-wrap.expanded { height: auto; }
+            #yt-iframe-container iframe { width: 100% !important; }
         }
     </style>
 </head>
@@ -1457,6 +1478,7 @@
 
                     if (aIdx < show.artists.length - 1) {
                         const sep = document.createElement('span');
+                        sep.className = 'artist-chip-sep';
                         sep.textContent = '·';
                         sep.style.cssText = 'color:var(--text-muted);font-weight:400;margin:0 2px';
                         chip.appendChild(sep);
