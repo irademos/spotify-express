@@ -8,6 +8,7 @@
         * { box-sizing: border-box; margin: 0; padding: 0; }
 
         html { overflow-x: hidden; }
+        body { max-width: 100%; }
 
         /* ── Theme tokens ── */
         :root {
@@ -217,7 +218,7 @@
 
         .show-item {
             display: grid;
-            grid-template-columns: 148px 1fr 1fr;
+            grid-template-columns: 148px minmax(0, 1fr) minmax(0, 1fr);
             gap: 12px;
             align-items: start;
             padding: 14px 0;
@@ -276,6 +277,7 @@
             align-items: center;
             gap: 6px;
             row-gap: 8px;
+            min-width: 0;
         }
 
         .artist-chip {
@@ -283,6 +285,7 @@
             align-items: center;
             gap: 6px;
             white-space: nowrap;
+            min-width: 0;
         }
 
         .play-btn {
@@ -311,6 +314,7 @@
             font-size: 13px;
             color: var(--text-secondary);
             text-align: right;
+            min-width: 0;
         }
 
         .artist-name-link {
@@ -598,7 +602,7 @@
 
             /* Show item: (date, venue) left col | artists right col */
             .show-item {
-                grid-template-columns: 100px 1fr;
+                grid-template-columns: 100px minmax(0, 1fr);
                 grid-template-areas:
                     "date    artists"
                     "venue   artists";
