@@ -151,6 +151,21 @@
         .delete-venue-btn:hover { background: #e74c3c; }
         .delete-venue-btn:disabled { background: #444; color: #888; cursor: default; }
 
+        .dismiss-reports-btn {
+            background: transparent;
+            color: #aaa;
+            border: 1px solid #555;
+            border-radius: 6px;
+            padding: 7px 14px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            flex-shrink: 0;
+            transition: border-color 0.15s, color 0.15s;
+        }
+        .dismiss-reports-btn:hover { border-color: #888; color: #ccc; }
+        .dismiss-reports-btn:disabled { color: #555; border-color: #444; cursor: default; }
+
         .empty-state {
             text-align: center;
             padding: 56px 20px;
@@ -369,10 +384,16 @@
                     deleteBtn.textContent = 'Delete Venue';
                     deleteBtn.addEventListener('click', () => deleteVenue(r.city, r.venueId, deleteBtn));
 
+                    const dismissBtn = document.createElement('button');
+                    dismissBtn.className = 'dismiss-reports-btn';
+                    dismissBtn.textContent = 'Dismiss Reports';
+                    dismissBtn.addEventListener('click', () => dismissVenueReports(r.city, r.venueId, dismissBtn, card));
+
                     card.appendChild(icon);
                     card.appendChild(body);
                     card.appendChild(countBadge);
                     card.appendChild(deleteBtn);
+                    card.appendChild(dismissBtn);
                     list.appendChild(card);
                 });
 
@@ -410,6 +431,23 @@
             if (remaining === 0) {
                 document.getElementById('notificationsContainer').innerHTML =
                     '<div class="empty-state"><div class="icon">✅</div>No venue reports — all clear.</div>';
+            }
+        }
+
+        async function dismissVenueReports(city, venueId, btn, card) {
+            btn.disabled = true;
+            btn.textContent = 'Dismissing…';
+            try {
+                const res = await fetch(`/api/venue-reports/${encodeURIComponent(city)}/${encodeURIComponent(venueId)}`, { method: 'DELETE' });
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                card.style.opacity = '0.4';
+                card.style.pointerEvents = 'none';
+                btn.textContent = 'Dismissed';
+                setTimeout(() => { card.remove(); checkEmpty(); }, 600);
+            } catch (err) {
+                btn.disabled = false;
+                btn.textContent = 'Dismiss Reports';
+                alert('Failed to dismiss: ' + err.message);
             }
         }
 
@@ -464,10 +502,16 @@
                     deleteBtn.textContent = 'Delete City';
                     deleteBtn.addEventListener('click', () => deleteCity(r.city, deleteBtn, card));
 
+                    const dismissBtn = document.createElement('button');
+                    dismissBtn.className = 'dismiss-reports-btn';
+                    dismissBtn.textContent = 'Dismiss Reports';
+                    dismissBtn.addEventListener('click', () => dismissCityReports(r.city, dismissBtn, card));
+
                     card.appendChild(icon);
                     card.appendChild(body);
                     card.appendChild(countBadge);
                     card.appendChild(deleteBtn);
+                    card.appendChild(dismissBtn);
                     list.appendChild(card);
                 });
 
@@ -493,6 +537,23 @@
                 btn.disabled = false;
                 btn.textContent = 'Delete City';
                 alert('Failed to delete city: ' + err.message);
+            }
+        }
+
+        async function dismissCityReports(city, btn, card) {
+            btn.disabled = true;
+            btn.textContent = 'Dismissing…';
+            try {
+                const res = await fetch(`/api/city-reports/${encodeURIComponent(city)}`, { method: 'DELETE' });
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                card.style.opacity = '0.4';
+                card.style.pointerEvents = 'none';
+                btn.textContent = 'Dismissed';
+                setTimeout(() => { card.remove(); }, 600);
+            } catch (err) {
+                btn.disabled = false;
+                btn.textContent = 'Dismiss Reports';
+                alert('Failed to dismiss: ' + err.message);
             }
         }
 
@@ -675,6 +736,30 @@
                     } catch (err) { alert('Failed: ' + err.message); clearBtn.disabled = false; }
                 });
                 actions.appendChild(clearBtn);
+            }
+
+            if (reports.length > 0) {
+                const dismissBtn = document.createElement('button');
+                dismissBtn.className = 'dismiss-reports-btn';
+                dismissBtn.textContent = 'Dismiss Reports';
+                dismissBtn.addEventListener('click', async () => {
+                    dismissBtn.disabled = true;
+                    dismissBtn.textContent = 'Dismissing…';
+                    try {
+                        const res = await fetch(`/api/video-reports/${encodeURIComponent(artist)}`, { method: 'DELETE' });
+                        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                        card.remove();
+                        if (override) {
+                            renderVideoCard(container, artist, [], override);
+                            container.appendChild(container.lastElementChild);
+                        }
+                    } catch (err) {
+                        dismissBtn.disabled = false;
+                        dismissBtn.textContent = 'Dismiss Reports';
+                        alert('Failed: ' + err.message);
+                    }
+                });
+                actions.appendChild(dismissBtn);
             }
 
             card.appendChild(actions);

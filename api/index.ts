@@ -364,6 +364,14 @@ app.delete('/api/city-venues/:city/venues/:venueId', requireAdmin, async (req, r
 
 // ── Venue reports ────────────────────────────────────────────────────────────
 
+app.delete('/api/venue-reports/:city/:venueId', requireAdmin, async (req, res) => {
+    const city = decodeURIComponent(req.params.city);
+    const venueId = decodeURIComponent(req.params.venueId);
+    const { error } = await supabase.from('venue_reports').delete().eq('city', city).eq('venue_id', venueId);
+    if (error) return res.status(500).json({ error: error.message });
+    res.json({ ok: true });
+});
+
 app.post('/api/venue-reports', async (req, res) => {
     const userId = (await getSpotifyUserId(req)) || 'anonymous';
 
@@ -406,6 +414,13 @@ app.get('/api/is-admin', async (req, res) => {
 
 // ── Video reports ────────────────────────────────────────────────────────────
 
+app.delete('/api/video-reports/:artistName', requireAdmin, async (req, res) => {
+    const artistName = decodeURIComponent(req.params.artistName);
+    const { error } = await supabase.from('video_reports').delete().eq('artist_name', artistName);
+    if (error) return res.status(500).json({ error: error.message });
+    res.json({ ok: true });
+});
+
 app.post('/api/video-reports', async (req, res) => {
     const userId = (await getSpotifyUserId(req)) || 'anonymous';
 
@@ -442,6 +457,13 @@ app.get('/api/video-reports', requireAdmin, async (req, res) => {
 });
 
 // ── City reports ──────────────────────────────────────────────────────────────
+
+app.delete('/api/city-reports/:city', requireAdmin, async (req, res) => {
+    const city = decodeURIComponent(req.params.city);
+    const { error } = await supabase.from('city_reports').delete().eq('city', city);
+    if (error) return res.status(500).json({ error: error.message });
+    res.json({ ok: true });
+});
 
 app.post('/api/city-reports', async (req, res) => {
     const userId = (await getSpotifyUserId(req)) || 'anonymous';
