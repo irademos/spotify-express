@@ -242,11 +242,15 @@ async function youtubeSearchScrape(q: string, artist: string, song: string): Pro
   }
 
   const nonVevo = candidates.filter(c => !/vevo/i.test(c.channel));
+  console.log(`[yt-scrape] query="${q}" found=${candidates.length} nonVevo=${nonVevo.length}`);
+  candidates.forEach(c => console.log(`  [yt-scrape]   ${c.videoId} ch="${c.channel}" dur=${c.durationSecs}s title="${c.title}"`));
 
   // If every result is Vevo, retry with "topic" to find an auto-generated channel
   if (nonVevo.length === 0 && candidates.every(c => c.channel !== '')) {
+    console.log(`[yt-scrape] all Vevo, retrying with topic query`);
     const topicCandidates = await scrapeCandidates(`${q} topic`);
     const topicNonVevo = topicCandidates.filter(c => !/vevo/i.test(c.channel));
+    console.log(`[yt-scrape] topic retry: found=${topicCandidates.length} nonVevo=${topicNonVevo.length}`);
     if (topicNonVevo.length > 0) candidates = topicNonVevo;
     else if (topicCandidates.length > 0) candidates = topicCandidates;
     // else fall through to original Vevo results as last resort
@@ -261,8 +265,10 @@ async function youtubeSearchScrape(q: string, artist: string, song: string): Pro
     if (s > bestScore) { best = c; bestScore = s; }
   }
 
+  const titleScore = scoreYouTubeTitle(best.title, artist, song);
+  console.log(`[yt-scrape] picked videoId=${best.videoId} titleScore=${titleScore.toFixed(2)} ch="${best.channel}" title="${best.title}"`);
   const MIN_TITLE_SCORE = 0.4;
-  return scoreYouTubeTitle(best.title, artist, song) >= MIN_TITLE_SCORE ? best.videoId : null;
+  return titleScore >= MIN_TITLE_SCORE ? best.videoId : null;
 }
 
 app.get('/api/youtube-search', async (req: any, res: any) => {
@@ -315,6 +321,8 @@ app.get('/api/youtube-search', async (req: any, res: any) => {
 
         const embeddableNonVevo = found.filter((i: any) => embeddable.has(i.id.videoId) && !isVevo(i));
         const nonVevo           = found.filter((i: any) => !isVevo(i));
+        console.log(`[yt] query="${query}" found=${found.length} embeddable=${embeddable.size} nonVevo=${nonVevo.length} embeddableNonVevo=${embeddableNonVevo.length}`);
+        found.forEach((i: any) => console.log(`  [yt]   ${i.id.videoId} ch="${i.snippet?.channelTitle}" emb=${embeddable.has(i.id.videoId)} title="${i.snippet?.title}"`));
         // Return the best non-Vevo pool we have; null pool signals all-Vevo results
         const pool = embeddableNonVevo.length > 0 ? embeddableNonVevo
                    : nonVevo.length > 0           ? nonVevo
@@ -327,10 +335,11 @@ app.get('/api/youtube-search', async (req: any, res: any) => {
       // If all results were Vevo, retry with "topic" appended — YouTube Topic channels
       // are auto-generated, always embeddable, and exist for most mainstream artists.
       if (!pool) {
+        console.log(`[yt] all Vevo on first pass, retrying with topic query`);
         const retry = await searchAndFilter(`${q} topic`);
         pool = retry.pool ?? []; // accept Vevo as last resort if topic search also fails
         durMap = { ...durMap, ...retry.durMap };
-        if (pool.length === 0) return res.json({ videoId: null });
+        if (pool.length === 0) { console.log(`[yt] topic retry also empty, returning null`); return res.json({ videoId: null }); }
       }
 
       let best = pool[0];
@@ -341,8 +350,9 @@ app.get('/api/youtube-search', async (req: any, res: any) => {
       }
 
       const MIN_TITLE_SCORE = 0.4;
-      const videoId = scoreYouTubeTitle(best.snippet?.title || '', artist, song) >= MIN_TITLE_SCORE
-        ? best.id.videoId : null;
+      const titleScore = scoreYouTubeTitle(best.snippet?.title || '', artist, song);
+      const videoId = titleScore >= MIN_TITLE_SCORE ? best.id.videoId : null;
+      console.log(`[yt] picked videoId=${videoId} titleScore=${titleScore.toFixed(2)} ch="${best.snippet?.channelTitle}" title="${best.snippet?.title}"`);
       return res.json({ videoId });
     } catch (err: any) {
       console.error('[youtube-search] API key failed, falling back to scrape:', err.message);
