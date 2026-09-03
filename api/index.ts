@@ -457,6 +457,18 @@ app.post('/api/city-reports', async (req, res) => {
     res.json({ ok: true });
 });
 
+app.delete('/api/city-venues/:city', requireAdmin, async (req, res) => {
+    const city = decodeURIComponent(req.params.city);
+
+    const { error } = await supabase.from('city_venues').delete().eq('city', city);
+    if (error) return res.status(500).json({ error: error.message });
+
+    await supabase.from('city_reports').delete().eq('city', city);
+    await supabase.from('venue_reports').delete().eq('city', city);
+
+    res.json({ ok: true });
+});
+
 app.get('/api/city-reports', requireAdmin, async (req, res) => {
     const { data, error } = await supabase
         .from('city_reports')
