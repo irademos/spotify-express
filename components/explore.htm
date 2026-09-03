@@ -7,6 +7,8 @@
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
 
+        html { overflow-x: hidden; }
+
         :root {
             --bg: #f0f0f0;
             --card-bg: #ffffff;
@@ -543,11 +545,12 @@
                 left: 12px;
                 right: 12px;
                 width: auto;
-                bottom: 60px;
+                bottom: max(80px, calc(60px + env(safe-area-inset-bottom, 0px)));
                 overflow: hidden;
             }
             /* YT API replaces the div with an iframe using the same id */
-            #yt-iframe-container { width: 100% !important; }
+            #yt-iframe-container { width: 100% !important; height: auto !important; aspect-ratio: 16/9; }
+            .yt-video-wrap.expanded { height: auto; }
         }
     </style>
 </head>
