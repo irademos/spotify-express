@@ -231,16 +231,14 @@ async function youtubeSearchScrape(q: string, artist: string, song: string): Pro
   const seen = new Set<string>();
   const unique = candidates.filter(c => { if (seen.has(c.videoId)) return false; seen.add(c.videoId); return true; });
 
-  // Pick the highest combined score; penalize Vevo channels (likely non-embeddable)
-  const scoreEntry = (c: typeof unique[0]) => {
-    const base = scoreCandidate(c.title, c.durationSecs, artist, song);
-    return /vevo/i.test(c.channel) ? base * 0.5 : base;
-  };
+  // Hard-exclude Vevo channels — they block third-party embedding
+  const nonVevo = unique.filter(c => !/vevo/i.test(c.channel));
+  const pool = nonVevo.length > 0 ? nonVevo : unique;
 
-  let best = unique[0];
-  let bestScore = scoreEntry(unique[0]);
-  for (const c of unique.slice(1)) {
-    const s = scoreEntry(c);
+  let best = pool[0];
+  let bestScore = scoreCandidate(best.title, best.durationSecs, artist, song);
+  for (const c of pool.slice(1)) {
+    const s = scoreCandidate(c.title, c.durationSecs, artist, song);
     if (s > bestScore) { best = c; bestScore = s; }
   }
 
@@ -293,21 +291,19 @@ app.get('/api/youtube-search', async (req: any, res: any) => {
         if (v.status?.embeddable !== false) embeddable.add(v.id);
       }
 
-      // Only consider embeddable videos; fall back to all if none are embeddable
-      const candidates = items.filter((i: any) => embeddable.has(i.id.videoId));
-      const pool = candidates.length > 0 ? candidates : items;
-
-      // Score each result; penalize Vevo channels (they often block embedding)
+      // Hard-exclude Vevo channels (block third-party embedding) and non-embeddable videos.
+      // Fall back progressively if filtering removes all candidates.
       const isVevo = (item: any) => /vevo/i.test(item.snippet?.channelTitle || '');
-      const scoreItem = (item: any) => {
-        const base = scoreCandidate(item.snippet?.title || '', durMap[item.id.videoId] ?? 0, artist, song);
-        return isVevo(item) ? base * 0.5 : base;
-      };
+      const embeddableNonVevo = items.filter((i: any) => embeddable.has(i.id.videoId) && !isVevo(i));
+      const nonVevo           = items.filter((i: any) => !isVevo(i));
+      const pool = embeddableNonVevo.length > 0 ? embeddableNonVevo
+                 : nonVevo.length > 0           ? nonVevo
+                 : items;
 
       let best = pool[0];
-      let bestScore = scoreItem(pool[0]);
+      let bestScore = scoreCandidate(pool[0].snippet?.title || '', durMap[pool[0].id.videoId] ?? 0, artist, song);
       for (const item of pool.slice(1)) {
-        const s = scoreItem(item);
+        const s = scoreCandidate(item.snippet?.title || '', durMap[item.id.videoId] ?? 0, artist, song);
         if (s > bestScore) { best = item; bestScore = s; }
       }
 
