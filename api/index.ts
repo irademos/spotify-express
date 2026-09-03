@@ -180,9 +180,24 @@ function parseHumanDuration(s: string): number {
   return 0;
 }
 
-// Combined relevance score (title + duration). Title dominates; duration breaks ties.
+// Prefer embeddable-friendly upload types; penalize official music videos (Vevo-hosted).
+// Returns an additive bonus in the range [-0.15, +0.10].
+function scoreUploadType(title: string): number {
+  const t = title.toLowerCase();
+  if (/official music video|\bomv\b/.test(t)) return -0.15; // typically Vevo, non-embeddable
+  if (/official audio/.test(t))               return  0.10; // artist channel, always embeddable
+  if (/official visuali[sz]er/.test(t))       return  0.08;
+  if (/lyric(s| video)/.test(t))              return  0.05;
+  if (/\baudio\b/.test(t))                    return  0.05;
+  if (/\blive\b/.test(t))                     return -0.05; // live ≠ studio recording
+  if (/slowed|reverb|\bremix\b/.test(t))      return -0.05; // altered versions
+  return 0;
+}
+
+// Combined relevance score (title match + upload type + duration).
 function scoreCandidate(title: string, durationSecs: number, artist: string, song: string): number {
-  return scoreYouTubeTitle(title, artist, song) * 0.75 + scoreDuration(durationSecs) * 0.25;
+  const base = scoreYouTubeTitle(title, artist, song) * 0.75 + scoreDuration(durationSecs) * 0.20;
+  return Math.max(0, base + scoreUploadType(title) * 0.05);
 }
 
 type ScrapeCandidate = { videoId: string; title: string; durationSecs: number; channel: string };
