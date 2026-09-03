@@ -242,7 +242,7 @@ async function scrapeCandidates(query: string): Promise<ScrapeCandidate[]> {
   return out.filter(c => { if (seen.has(c.videoId)) return false; seen.add(c.videoId); return true; });
 }
 
-async function youtubeSearchScrape(q: string, artist: string, song: string): Promise<string | null> {
+async function youtubeSearchScrape(q: string, artist: string, song: string): Promise<string[]> {
   let candidates = await scrapeCandidates(q);
 
   if (candidates.length === 0) {
@@ -253,7 +253,7 @@ async function youtubeSearchScrape(q: string, artist: string, song: string): Pro
       timeout: 10000,
     });
     const simple = (resp.data as string).match(/"videoId":"([a-zA-Z0-9_-]{11})"/);
-    return simple ? simple[1] : null;
+    return simple ? [simple[1]] : [];
   }
 
   const nonVevo = candidates.filter(c => !/vevo/i.test(c.channel));
@@ -268,22 +268,20 @@ async function youtubeSearchScrape(q: string, artist: string, song: string): Pro
     console.log(`[yt-scrape] topic retry: found=${topicCandidates.length} nonVevo=${topicNonVevo.length}`);
     if (topicNonVevo.length > 0) candidates = topicNonVevo;
     else if (topicCandidates.length > 0) candidates = topicCandidates;
-    // else fall through to original Vevo results as last resort
   } else if (nonVevo.length > 0) {
     candidates = nonVevo;
   }
 
-  let best = candidates[0];
-  let bestScore = scoreCandidate(best.title, best.durationSecs, artist, song);
-  for (const c of candidates.slice(1)) {
-    const s = scoreCandidate(c.title, c.durationSecs, artist, song);
-    if (s > bestScore) { best = c; bestScore = s; }
-  }
-
-  const titleScore = scoreYouTubeTitle(best.title, artist, song);
-  console.log(`[yt-scrape] picked videoId=${best.videoId} titleScore=${titleScore.toFixed(2)} ch="${best.channel}" title="${best.title}"`);
   const MIN_TITLE_SCORE = 0.4;
-  return titleScore >= MIN_TITLE_SCORE ? best.videoId : null;
+  const sorted = candidates
+    .map(c => ({ ...c, score: scoreCandidate(c.title, c.durationSecs, artist, song), titleScore: scoreYouTubeTitle(c.title, artist, song) }))
+    .filter(c => c.titleScore >= MIN_TITLE_SCORE)
+    .sort((a, b) => b.score - a.score);
+
+  const top3 = sorted.slice(0, 3);
+  console.log(`[yt-scrape] returning top ${top3.length} candidates`);
+  top3.forEach(c => console.log(`  [yt-scrape]   ${c.videoId} score=${c.score.toFixed(2)} ch="${c.channel}" title="${c.title}"`));
+  return top3.map(c => c.videoId);
 }
 
 app.get('/api/youtube-search', async (req: any, res: any) => {
@@ -357,26 +355,30 @@ app.get('/api/youtube-search', async (req: any, res: any) => {
         if (pool.length === 0) { console.log(`[yt] topic retry also empty, returning null`); return res.json({ videoId: null }); }
       }
 
-      let best = pool[0];
-      let bestScore = scoreCandidate(pool[0].snippet?.title || '', durMap[pool[0].id.videoId] ?? 0, artist, song);
-      for (const item of pool.slice(1)) {
-        const s = scoreCandidate(item.snippet?.title || '', durMap[item.id.videoId] ?? 0, artist, song);
-        if (s > bestScore) { best = item; bestScore = s; }
-      }
+      // Sort pool by combined score descending
+      const scored = pool.map((item: any) => ({
+        item,
+        score: scoreCandidate(item.snippet?.title || '', durMap[item.id.videoId] ?? 0, artist, song),
+        titleScore: scoreYouTubeTitle(item.snippet?.title || '', artist, song),
+      })).sort((a: any, b: any) => b.score - a.score);
 
       const MIN_TITLE_SCORE = 0.4;
-      const titleScore = scoreYouTubeTitle(best.snippet?.title || '', artist, song);
-      const videoId = titleScore >= MIN_TITLE_SCORE ? best.id.videoId : null;
-      console.log(`[yt] picked videoId=${videoId} titleScore=${titleScore.toFixed(2)} ch="${best.snippet?.channelTitle}" title="${best.snippet?.title}"`);
-      return res.json({ videoId });
+      const videoIds = scored
+        .filter((r: any) => r.titleScore >= MIN_TITLE_SCORE)
+        .slice(0, 3)
+        .map((r: any) => r.item.id.videoId);
+
+      console.log(`[yt] returning videoIds=${JSON.stringify(videoIds)} scores=${scored.slice(0,3).map((r:any) => r.score.toFixed(2)).join(',')}`);
+      scored.slice(0, 3).forEach((r: any) => console.log(`  [yt]   ${r.item.id.videoId} score=${r.score.toFixed(2)} ch="${r.item.snippet?.channelTitle}" title="${r.item.snippet?.title}"`));
+      return res.json({ videoId: videoIds[0] ?? null, videoIds });
     } catch (err: any) {
       console.error('[youtube-search] API key failed, falling back to scrape:', err.message);
     }
   }
 
   try {
-    const videoId = await youtubeSearchScrape(q, artist, song);
-    res.json({ videoId });
+    const videoIds = await youtubeSearchScrape(q, artist, song);
+    res.json({ videoId: videoIds[0] ?? null, videoIds });
   } catch (err: any) {
     console.error('[youtube-search]', err.message);
     res.status(500).json({ error: 'Search failed' });

@@ -1071,6 +1071,8 @@
         let activeArtistName = null;
         let activeArtistIdx  = null;
         const showFallbackState = {};
+        // Remaining candidate videoIds to try before giving up on an artist
+        let pendingVideoIds = [];
 
         function playNextArtist() {
             const visible = allShows.filter(s => selectedVenueIds.has(s.venueId) && isUpcoming(s));
@@ -1138,6 +1140,15 @@
 
         function handleYtError() {
             if (activeShowIdx === null) return;
+
+            // Try the next candidate videoId from the same search before falling back to song #2
+            if (pendingVideoIds.length > 0) {
+                const nextId = pendingVideoIds.shift();
+                activeVideoId = nextId;
+                if (ytReady && ytPlayer) ytPlayer.loadVideoById(nextId);
+                return;
+            }
+
             const state = showFallbackState[activeShowIdx + '|' + activeArtistName];
             if (!state) return;
             const songs = artistTopSongs[state.artistName] || [];
@@ -1165,12 +1176,17 @@
             if (btn) { btn.classList.add('loading'); btn.textContent = '⟳'; }
 
             let videoId = null;
+            pendingVideoIds = [];
             try {
                 const q = `${artistName} ${songName}`;
                 const url = `/api/youtube-search?q=${encodeURIComponent(q)}&artist=${encodeURIComponent(artistName)}&song=${encodeURIComponent(songName)}`;
                 const resp = await fetch(url);
                 const data = await resp.json();
                 videoId = data.videoId || null;
+                // Store remaining candidates to try if the first one fails to embed
+                if (Array.isArray(data.videoIds) && data.videoIds.length > 1) {
+                    pendingVideoIds = data.videoIds.slice(1);
+                }
             } catch (e) { videoId = null; }
 
             if (btn) { btn.classList.remove('loading'); btn.textContent = '▶'; }
