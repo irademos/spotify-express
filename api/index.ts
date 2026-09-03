@@ -151,6 +151,39 @@ function scoreYouTubeTitle(title: string, artist: string, song: string): number 
   return artistScore * 0.6 + songScore * 0.4;
 }
 
+// Score video duration for how likely it is a single song (not a live set / full album).
+// Peaks around 2.5–5 min, tapers for longer videos. Returns 0–1.
+function scoreDuration(seconds: number): number {
+  if (seconds <= 0) return 0.5; // unknown duration — neutral
+  if (seconds < 60) return 0.2; // too short (clip / teaser)
+  if (seconds <= 300) return 1.0; // 1–5 min: ideal song length
+  if (seconds <= 480) return 0.85; // 5–8 min: acceptable (longer tracks)
+  if (seconds <= 600) return 0.6; // 8–10 min: probably live or extended
+  if (seconds <= 900) return 0.35; // 10–15 min: likely a set / medley
+  return 0.1; // 15+ min: almost certainly not a single song
+}
+
+// Parse ISO 8601 duration (e.g. "PT4M32S") to seconds.
+function parseIsoDuration(iso: string): number {
+  const m = iso.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+  if (!m) return 0;
+  return (parseInt(m[1] || '0') * 3600) + (parseInt(m[2] || '0') * 60) + parseInt(m[3] || '0');
+}
+
+// Parse a human-readable duration string (e.g. "4:32", "1:02:15") to seconds.
+function parseHumanDuration(s: string): number {
+  const parts = s.split(':').map(Number);
+  if (parts.some(isNaN)) return 0;
+  if (parts.length === 2) return parts[0] * 60 + parts[1];
+  if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+  return 0;
+}
+
+// Combined relevance score (title + duration). Title dominates; duration breaks ties.
+function scoreCandidate(title: string, durationSecs: number, artist: string, song: string): number {
+  return scoreYouTubeTitle(title, artist, song) * 0.75 + scoreDuration(durationSecs) * 0.25;
+}
+
 async function youtubeSearchScrape(q: string, artist: string, song: string): Promise<string | null> {
   const resp = await axios.get('https://www.youtube.com/results', {
     params: { search_query: q },
@@ -162,15 +195,24 @@ async function youtubeSearchScrape(q: string, artist: string, song: string): Pro
   });
   const html: string = resp.data;
 
-  // Extract up to 10 {videoId, title} pairs from the ytInitialData JSON blob
-  const candidates: Array<{ videoId: string; title: string }> = [];
-  const videoRegex = /"videoId":"([a-zA-Z0-9_-]{11})","thumbnail":.*?"title":\{"runs":\[\{"text":"([^"]+)"/g;
+  // Extract up to 10 {videoId, title, durationSecs} entries from the ytInitialData JSON blob.
+  // Duration appears as "lengthText":{"accessibility":...,"simpleText":"4:32"}
+  const candidates: Array<{ videoId: string; title: string; durationSecs: number }> = [];
+  const videoRegex = /"videoId":"([a-zA-Z0-9_-]{11})","thumbnail":.*?"title":\{"runs":\[\{"text":"([^"]+)".*?"lengthText":\{[^}]*"simpleText":"([^"]+)"/g;
   let m: RegExpExecArray | null;
   while ((m = videoRegex.exec(html)) !== null && candidates.length < 10) {
-    candidates.push({ videoId: m[1], title: m[2] });
+    candidates.push({ videoId: m[1], title: m[2], durationSecs: parseHumanDuration(m[3]) });
   }
 
-  // Fallback: grab just the first videoId if the richer pattern matched nothing
+  // Looser fallback: title without duration
+  if (candidates.length === 0) {
+    const videoRegex2 = /"videoId":"([a-zA-Z0-9_-]{11})","thumbnail":.*?"title":\{"runs":\[\{"text":"([^"]+)"/g;
+    while ((m = videoRegex2.exec(html)) !== null && candidates.length < 10) {
+      candidates.push({ videoId: m[1], title: m[2], durationSecs: 0 });
+    }
+  }
+
+  // Last-resort fallback: first videoId with no metadata
   if (candidates.length === 0) {
     const simple = html.match(/"videoId":"([a-zA-Z0-9_-]{11})"/);
     return simple ? simple[1] : null;
@@ -180,16 +222,16 @@ async function youtubeSearchScrape(q: string, artist: string, song: string): Pro
   const seen = new Set<string>();
   const unique = candidates.filter(c => { if (seen.has(c.videoId)) return false; seen.add(c.videoId); return true; });
 
-  // Pick the highest-scoring result; reject if score is too low
+  // Pick the highest combined score; reject if title score alone is too low
   let best = unique[0];
-  let bestScore = scoreYouTubeTitle(best.title, artist, song);
+  let bestScore = scoreCandidate(best.title, best.durationSecs, artist, song);
   for (const c of unique.slice(1)) {
-    const s = scoreYouTubeTitle(c.title, artist, song);
+    const s = scoreCandidate(c.title, c.durationSecs, artist, song);
     if (s > bestScore) { best = c; bestScore = s; }
   }
 
-  const MIN_SCORE = 0.4;
-  return bestScore >= MIN_SCORE ? best.videoId : null;
+  const MIN_TITLE_SCORE = 0.4;
+  return scoreYouTubeTitle(best.title, artist, song) >= MIN_TITLE_SCORE ? best.videoId : null;
 }
 
 app.get('/api/youtube-search', async (req: any, res: any) => {
@@ -215,24 +257,37 @@ app.get('/api/youtube-search', async (req: any, res: any) => {
 
   if (apiKey) {
     try {
-      const resp = await axios.get('https://www.googleapis.com/youtube/v3/search', {
+      const searchResp = await axios.get('https://www.googleapis.com/youtube/v3/search', {
         params: { key: apiKey, q, part: 'snippet', type: 'video', maxResults: 5 },
         headers: { Referer: 'https://upcoming-shows.vercel.app/' },
         timeout: 8000,
       });
-      const items: any[] = resp.data?.items || [];
+      const items: any[] = searchResp.data?.items || [];
       if (items.length === 0) return res.json({ videoId: null });
 
-      // Score each result and pick the best match
+      // Fetch durations for all candidate videos in one call
+      const ids = items.map((i: any) => i.id.videoId).join(',');
+      const durResp = await axios.get('https://www.googleapis.com/youtube/v3/videos', {
+        params: { key: apiKey, id: ids, part: 'contentDetails' },
+        headers: { Referer: 'https://upcoming-shows.vercel.app/' },
+        timeout: 6000,
+      });
+      const durMap: Record<string, number> = {};
+      for (const v of (durResp.data?.items || [])) {
+        durMap[v.id] = parseIsoDuration(v.contentDetails?.duration || '');
+      }
+
+      // Score each result and pick the best combined match
       let best = items[0];
-      let bestScore = scoreYouTubeTitle(items[0].snippet?.title || '', artist, song);
+      let bestScore = scoreCandidate(items[0].snippet?.title || '', durMap[items[0].id.videoId] ?? 0, artist, song);
       for (const item of items.slice(1)) {
-        const s = scoreYouTubeTitle(item.snippet?.title || '', artist, song);
+        const s = scoreCandidate(item.snippet?.title || '', durMap[item.id.videoId] ?? 0, artist, song);
         if (s > bestScore) { best = item; bestScore = s; }
       }
 
-      const MIN_SCORE = 0.4;
-      const videoId = bestScore >= MIN_SCORE ? best.id.videoId : null;
+      const MIN_TITLE_SCORE = 0.4;
+      const videoId = scoreYouTubeTitle(best.snippet?.title || '', artist, song) >= MIN_TITLE_SCORE
+        ? best.id.videoId : null;
       return res.json({ videoId });
     } catch (err: any) {
       console.error('[youtube-search] API key failed, falling back to scrape:', err.message);
