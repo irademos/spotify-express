@@ -185,9 +185,11 @@ function scoreCandidate(title: string, durationSecs: number, artist: string, son
   return scoreYouTubeTitle(title, artist, song) * 0.75 + scoreDuration(durationSecs) * 0.25;
 }
 
-async function youtubeSearchScrape(q: string, artist: string, song: string): Promise<string | null> {
+type ScrapeCandidate = { videoId: string; title: string; durationSecs: number; channel: string };
+
+async function scrapeCandidates(query: string): Promise<ScrapeCandidate[]> {
   const resp = await axios.get('https://www.youtube.com/results', {
-    params: { search_query: q },
+    params: { search_query: query },
     headers: {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
       'Accept-Language': 'en-US,en;q=0.9',
@@ -195,49 +197,66 @@ async function youtubeSearchScrape(q: string, artist: string, song: string): Pro
     timeout: 10000,
   });
   const html: string = resp.data;
+  const out: ScrapeCandidate[] = [];
 
-  // Extract up to 10 {videoId, title, durationSecs, channel} entries from the ytInitialData JSON blob.
-  // Duration appears as "lengthText":{"accessibility":...,"simpleText":"4:32"}
-  const candidates: Array<{ videoId: string; title: string; durationSecs: number; channel: string }> = [];
-  const videoRegex = /"videoId":"([a-zA-Z0-9_-]{11})","thumbnail":.*?"title":\{"runs":\[\{"text":"([^"]+)".*?"lengthText":\{[^}]*"simpleText":"([^"]+)".*?"ownerText":\{"runs":\[\{"text":"([^"]+)"/g;
+  // Full metadata: videoId + title + duration + channel
+  const r1 = /"videoId":"([a-zA-Z0-9_-]{11})","thumbnail":.*?"title":\{"runs":\[\{"text":"([^"]+)".*?"lengthText":\{[^}]*"simpleText":"([^"]+)".*?"ownerText":\{"runs":\[\{"text":"([^"]+)"/g;
   let m: RegExpExecArray | null;
-  while ((m = videoRegex.exec(html)) !== null && candidates.length < 10) {
-    candidates.push({ videoId: m[1], title: m[2], durationSecs: parseHumanDuration(m[3]), channel: m[4] });
+  while ((m = r1.exec(html)) !== null && out.length < 15) {
+    out.push({ videoId: m[1], title: m[2], durationSecs: parseHumanDuration(m[3]), channel: m[4] });
   }
 
-  // Looser fallback: title + duration, no channel
-  if (candidates.length === 0) {
-    const videoRegex2 = /"videoId":"([a-zA-Z0-9_-]{11})","thumbnail":.*?"title":\{"runs":\[\{"text":"([^"]+)".*?"lengthText":\{[^}]*"simpleText":"([^"]+)"/g;
-    while ((m = videoRegex2.exec(html)) !== null && candidates.length < 10) {
-      candidates.push({ videoId: m[1], title: m[2], durationSecs: parseHumanDuration(m[3]), channel: '' });
+  if (out.length === 0) {
+    // title + duration, no channel
+    const r2 = /"videoId":"([a-zA-Z0-9_-]{11})","thumbnail":.*?"title":\{"runs":\[\{"text":"([^"]+)".*?"lengthText":\{[^}]*"simpleText":"([^"]+)"/g;
+    while ((m = r2.exec(html)) !== null && out.length < 15) {
+      out.push({ videoId: m[1], title: m[2], durationSecs: parseHumanDuration(m[3]), channel: '' });
     }
   }
 
-  // Looser fallback: title only
-  if (candidates.length === 0) {
-    const videoRegex3 = /"videoId":"([a-zA-Z0-9_-]{11})","thumbnail":.*?"title":\{"runs":\[\{"text":"([^"]+)"/g;
-    while ((m = videoRegex3.exec(html)) !== null && candidates.length < 10) {
-      candidates.push({ videoId: m[1], title: m[2], durationSecs: 0, channel: '' });
+  if (out.length === 0) {
+    // title only
+    const r3 = /"videoId":"([a-zA-Z0-9_-]{11})","thumbnail":.*?"title":\{"runs":\[\{"text":"([^"]+)"/g;
+    while ((m = r3.exec(html)) !== null && out.length < 15) {
+      out.push({ videoId: m[1], title: m[2], durationSecs: 0, channel: '' });
     }
   }
 
-  // Last-resort fallback: first videoId with no metadata
+  // Deduplicate
+  const seen = new Set<string>();
+  return out.filter(c => { if (seen.has(c.videoId)) return false; seen.add(c.videoId); return true; });
+}
+
+async function youtubeSearchScrape(q: string, artist: string, song: string): Promise<string | null> {
+  let candidates = await scrapeCandidates(q);
+
   if (candidates.length === 0) {
-    const simple = html.match(/"videoId":"([a-zA-Z0-9_-]{11})"/);
+    // Last-resort: plain regex for videoId with no metadata
+    const resp = await axios.get('https://www.youtube.com/results', {
+      params: { search_query: q },
+      headers: { 'User-Agent': 'Mozilla/5.0', 'Accept-Language': 'en-US,en;q=0.9' },
+      timeout: 10000,
+    });
+    const simple = (resp.data as string).match(/"videoId":"([a-zA-Z0-9_-]{11})"/);
     return simple ? simple[1] : null;
   }
 
-  // Deduplicate by videoId
-  const seen = new Set<string>();
-  const unique = candidates.filter(c => { if (seen.has(c.videoId)) return false; seen.add(c.videoId); return true; });
+  const nonVevo = candidates.filter(c => !/vevo/i.test(c.channel));
 
-  // Hard-exclude Vevo channels — they block third-party embedding
-  const nonVevo = unique.filter(c => !/vevo/i.test(c.channel));
-  const pool = nonVevo.length > 0 ? nonVevo : unique;
+  // If every result is Vevo, retry with "topic" to find an auto-generated channel
+  if (nonVevo.length === 0 && candidates.every(c => c.channel !== '')) {
+    const topicCandidates = await scrapeCandidates(`${q} topic`);
+    const topicNonVevo = topicCandidates.filter(c => !/vevo/i.test(c.channel));
+    if (topicNonVevo.length > 0) candidates = topicNonVevo;
+    else if (topicCandidates.length > 0) candidates = topicCandidates;
+    // else fall through to original Vevo results as last resort
+  } else if (nonVevo.length > 0) {
+    candidates = nonVevo;
+  }
 
-  let best = pool[0];
+  let best = candidates[0];
   let bestScore = scoreCandidate(best.title, best.durationSecs, artist, song);
-  for (const c of pool.slice(1)) {
+  for (const c of candidates.slice(1)) {
     const s = scoreCandidate(c.title, c.durationSecs, artist, song);
     if (s > bestScore) { best = c; bestScore = s; }
   }
@@ -269,36 +288,50 @@ app.get('/api/youtube-search', async (req: any, res: any) => {
 
   if (apiKey) {
     try {
-      const searchResp = await axios.get('https://www.googleapis.com/youtube/v3/search', {
-        params: { key: apiKey, q, part: 'snippet', type: 'video', maxResults: 5 },
-        headers: { Referer: 'https://upcoming-shows.vercel.app/' },
-        timeout: 8000,
-      });
-      const items: any[] = searchResp.data?.items || [];
-      if (items.length === 0) return res.json({ videoId: null });
-
-      // Fetch duration + embeddability for all candidates in one call
-      const ids = items.map((i: any) => i.id.videoId).join(',');
-      const detailResp = await axios.get('https://www.googleapis.com/youtube/v3/videos', {
-        params: { key: apiKey, id: ids, part: 'contentDetails,status' },
-        headers: { Referer: 'https://upcoming-shows.vercel.app/' },
-        timeout: 6000,
-      });
-      const durMap: Record<string, number> = {};
-      const embeddable: Set<string> = new Set();
-      for (const v of (detailResp.data?.items || [])) {
-        durMap[v.id] = parseIsoDuration(v.contentDetails?.duration || '');
-        if (v.status?.embeddable !== false) embeddable.add(v.id);
-      }
-
-      // Hard-exclude Vevo channels (block third-party embedding) and non-embeddable videos.
-      // Fall back progressively if filtering removes all candidates.
       const isVevo = (item: any) => /vevo/i.test(item.snippet?.channelTitle || '');
-      const embeddableNonVevo = items.filter((i: any) => embeddable.has(i.id.videoId) && !isVevo(i));
-      const nonVevo           = items.filter((i: any) => !isVevo(i));
-      const pool = embeddableNonVevo.length > 0 ? embeddableNonVevo
-                 : nonVevo.length > 0           ? nonVevo
-                 : items;
+
+      // Helper: search + fetch details, return scored pool filtered to non-Vevo where possible
+      const searchAndFilter = async (query: string) => {
+        const searchResp = await axios.get('https://www.googleapis.com/youtube/v3/search', {
+          params: { key: apiKey, q: query, part: 'snippet', type: 'video', maxResults: 10 },
+          headers: { Referer: 'https://upcoming-shows.vercel.app/' },
+          timeout: 8000,
+        });
+        const found: any[] = searchResp.data?.items || [];
+        if (found.length === 0) return { pool: [], durMap: {} as Record<string, number> };
+
+        const ids = found.map((i: any) => i.id.videoId).join(',');
+        const detailResp = await axios.get('https://www.googleapis.com/youtube/v3/videos', {
+          params: { key: apiKey, id: ids, part: 'contentDetails,status' },
+          headers: { Referer: 'https://upcoming-shows.vercel.app/' },
+          timeout: 6000,
+        });
+        const durMap: Record<string, number> = {};
+        const embeddable: Set<string> = new Set();
+        for (const v of (detailResp.data?.items || [])) {
+          durMap[v.id] = parseIsoDuration(v.contentDetails?.duration || '');
+          if (v.status?.embeddable !== false) embeddable.add(v.id);
+        }
+
+        const embeddableNonVevo = found.filter((i: any) => embeddable.has(i.id.videoId) && !isVevo(i));
+        const nonVevo           = found.filter((i: any) => !isVevo(i));
+        // Return the best non-Vevo pool we have; null pool signals all-Vevo results
+        const pool = embeddableNonVevo.length > 0 ? embeddableNonVevo
+                   : nonVevo.length > 0           ? nonVevo
+                   : null;
+        return { pool, durMap };
+      };
+
+      let { pool, durMap } = await searchAndFilter(q);
+
+      // If all results were Vevo, retry with "topic" appended — YouTube Topic channels
+      // are auto-generated, always embeddable, and exist for most mainstream artists.
+      if (!pool) {
+        const retry = await searchAndFilter(`${q} topic`);
+        pool = retry.pool ?? []; // accept Vevo as last resort if topic search also fails
+        durMap = { ...durMap, ...retry.durMap };
+        if (pool.length === 0) return res.json({ videoId: null });
+      }
 
       let best = pool[0];
       let bestScore = scoreCandidate(pool[0].snippet?.title || '', durMap[pool[0].id.videoId] ?? 0, artist, song);
