@@ -459,9 +459,15 @@
                     countBadge.className = 'report-count' + (r.count === 1 ? ' single' : '');
                     countBadge.textContent = r.count === 1 ? '1 report' : `${r.count} reports`;
 
+                    const deleteBtn = document.createElement('button');
+                    deleteBtn.className = 'delete-venue-btn';
+                    deleteBtn.textContent = 'Delete City';
+                    deleteBtn.addEventListener('click', () => deleteCity(r.city, deleteBtn, card));
+
                     card.appendChild(icon);
                     card.appendChild(body);
                     card.appendChild(countBadge);
+                    card.appendChild(deleteBtn);
                     list.appendChild(card);
                 });
 
@@ -469,6 +475,24 @@
                 container.appendChild(list);
             } catch (err) {
                 container.innerHTML = `<div class="empty-state"><div class="icon">⚠️</div>Failed to load city reports.<br><small style="color:#555">${err.message}</small></div>`;
+            }
+        }
+
+        async function deleteCity(city, btn, card) {
+            if (!confirm(`Delete city "${city}"? This will remove all its venues and reports.`)) return;
+            btn.disabled = true;
+            btn.textContent = 'Deleting…';
+            try {
+                const res = await fetch(`/api/city-venues/${encodeURIComponent(city)}`, { method: 'DELETE' });
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                card.style.opacity = '0.4';
+                card.style.pointerEvents = 'none';
+                btn.textContent = 'Deleted';
+                setTimeout(() => { card.remove(); }, 600);
+            } catch (err) {
+                btn.disabled = false;
+                btn.textContent = 'Delete City';
+                alert('Failed to delete city: ' + err.message);
             }
         }
 
