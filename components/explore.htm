@@ -593,13 +593,15 @@
                 <div class="yt-song-name" id="ytSongName">—</div>
             </div>
             <div class="yt-header-btns">
+                <button class="yt-ctrl-btn" id="ytPrevBtn" title="Previous artist">⏮</button>
                 <button class="yt-ctrl-btn accent" id="ytPlayPauseBtn" title="Play/Pause">⏸</button>
-                <button class="yt-ctrl-btn" id="ytToggleVideo" title="Show video">▪</button>
+                <button class="yt-ctrl-btn" id="ytNextBtn" title="Next artist">⏭</button>
+                <button class="yt-ctrl-btn" id="ytToggleVideo" title="Hide video">▼</button>
                 <button class="yt-ctrl-btn" id="ytReportVideoBtn" title="Report this video" style="font-size:13px;color:var(--text-muted);">⚑</button>
                 <button class="yt-ctrl-btn" id="ytCloseBtn" title="Close">✕</button>
             </div>
         </div>
-        <div class="yt-video-wrap collapsed" id="ytVideoWrap">
+        <div class="yt-video-wrap expanded" id="ytVideoWrap">
             <div id="yt-iframe-container"></div>
         </div>
     </div>
@@ -1065,7 +1067,7 @@
         // ── YouTube IFrame API ────────────────────────────────────────────────
         let ytPlayer   = null;
         let ytReady    = false;
-        let videoShown = false;
+        let videoShown = true;
 
         let activeShowIdx    = null;
         let activeArtistName = null;
@@ -1073,6 +1075,40 @@
         const showFallbackState = {};
         // Remaining candidate videoIds to try before giving up on an artist
         let pendingVideoIds = [];
+
+        function playPrevArtist() {
+            const visible = allShows.filter(s => selectedVenueIds.has(s.venueId) && isUpcoming(s));
+            const visIdx  = visible.findIndex(s => allShows.indexOf(s) === activeShowIdx);
+            if (visIdx === -1) return;
+
+            const show = visible[visIdx];
+            const prevArtistIdx = (activeArtistIdx ?? 0) - 1;
+
+            if (prevArtistIdx >= 0) {
+                const name  = show.artists[prevArtistIdx];
+                const songs = artistTopSongs[name] || [];
+                if (songs.length > 0) {
+                    delete showFallbackState[activeShowIdx + '|' + name];
+                    activeArtistIdx = prevArtistIdx;
+                    searchAndPlay(activeShowIdx, name, songs[0]);
+                    return;
+                }
+            }
+
+            const prevVisIdx = visIdx - 1;
+            if (prevVisIdx >= 0) {
+                const prevShow   = visible[prevVisIdx];
+                const prevGlobal = allShows.indexOf(prevShow);
+                const lastIdx    = prevShow.artists.length - 1;
+                const name       = prevShow.artists[lastIdx];
+                const songs      = artistTopSongs[name] || [];
+                if (songs.length > 0) {
+                    delete showFallbackState[prevGlobal + '|' + name];
+                    activeArtistIdx = lastIdx;
+                    searchAndPlay(prevGlobal, name, songs[0]);
+                }
+            }
+        }
 
         function playNextArtist() {
             const visible = allShows.filter(s => selectedVenueIds.has(s.venueId) && isUpcoming(s));
@@ -1118,18 +1154,29 @@
                     onStateChange: function (e) {
                         const btn = document.getElementById('ytPlayPauseBtn');
                         if (e.data === YT.PlayerState.PLAYING) {
-                            // Show the card only once the video is actually playing
                             document.getElementById('yt-player-card').classList.add('visible');
                             btn.textContent = '⏸';
                             document.querySelectorAll('.play-btn').forEach(b => {
-                                b.classList.toggle('active', parseInt(b.dataset.idx) === activeShowIdx
-                                    && b.dataset.artist === activeArtistName);
+                                const isActive = parseInt(b.dataset.idx) === activeShowIdx
+                                    && b.dataset.artist === activeArtistName;
+                                b.classList.toggle('active', isActive);
+                                b.textContent = isActive ? '⏸' : '▶';
+                            });
+                            document.querySelectorAll('.show-item').forEach(li => {
+                                li.classList.toggle('show-item--playing',
+                                    parseInt(li.dataset.idx) === activeShowIdx);
                             });
                         } else if (e.data === YT.PlayerState.PAUSED) {
                             btn.textContent = '▶';
+                            document.querySelectorAll('.play-btn.active').forEach(b => { b.textContent = '▶'; });
+                            document.querySelectorAll('.show-item').forEach(li => li.classList.remove('show-item--playing'));
                         } else if (e.data === YT.PlayerState.ENDED) {
                             btn.textContent = '▶';
-                            document.querySelectorAll('.play-btn').forEach(b => b.classList.remove('active'));
+                            document.querySelectorAll('.play-btn').forEach(b => {
+                                b.classList.remove('active');
+                                b.textContent = '▶';
+                            });
+                            document.querySelectorAll('.show-item').forEach(li => li.classList.remove('show-item--playing'));
                             playNextArtist();
                         }
                     },
@@ -1171,7 +1218,14 @@
                 attempt: songName === songs[0] ? 0 : 1
             };
 
-            // Set loading state
+            // Clear all active states immediately to prevent stale pause symbols
+            document.querySelectorAll('.play-btn').forEach(b => {
+                b.classList.remove('active');
+                b.textContent = '▶';
+            });
+            document.querySelectorAll('.show-item').forEach(li => li.classList.remove('show-item--playing'));
+
+            // Set loading state on the target button
             const btn = document.querySelector(`.play-btn[data-idx="${showIdx}"][data-artist="${CSS.escape(artistName)}"]`);
             if (btn) { btn.classList.add('loading'); btn.textContent = '⟳'; }
 
@@ -1234,6 +1288,14 @@
             activeArtistIdx  = null;
         });
 
+        document.getElementById('ytPrevBtn').addEventListener('click', () => {
+            if (activeShowIdx !== null) playPrevArtist();
+        });
+
+        document.getElementById('ytNextBtn').addEventListener('click', () => {
+            if (activeShowIdx !== null) playNextArtist();
+        });
+
         document.getElementById('ytReportVideoBtn').addEventListener('click', async () => {
             if (!activeArtistName || !activeVideoId) return;
             const key = `${activeArtistName}|${activeVideoId}`;
@@ -1264,7 +1326,7 @@
             wrap.classList.toggle('expanded', videoShown);
             wrap.classList.toggle('collapsed', !videoShown);
             btn.title   = videoShown ? 'Hide video' : 'Show video';
-            btn.textContent = videoShown ? '▫' : '▪';
+            btn.textContent = videoShown ? '▼' : '▲';
         });
 
         // ── Shows rendering ───────────────────────────────────────────────────
@@ -1292,6 +1354,7 @@
                 const date = parseDate(show.datetime);
                 const li = document.createElement('li');
                 li.className = 'show-item';
+                li.dataset.idx = globalIdx;
                 if (activeShowIdx === globalIdx) li.classList.add('show-item--playing');
 
                 // Date + avatar cell
