@@ -131,7 +131,27 @@ app.get('/explore', function (req: any, res: any) {
   res.sendFile(path.join(__dirname, '..', 'components', 'explore.htm'));
 });
 
-async function youtubeSearchScrape(q: string): Promise<string | null> {
+// Score how well a YouTube video title matches the expected artist + song.
+// Returns a value 0–1; higher is better.
+function scoreYouTubeTitle(title: string, artist: string, song: string): number {
+  const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+  const t = norm(title);
+  const artistWords = norm(artist).split(' ').filter(w => w.length > 1);
+  const songWords   = norm(song).split(' ').filter(w => w.length > 1);
+
+  if (artistWords.length === 0 && songWords.length === 0) return 0.5;
+
+  const artistHits = artistWords.filter(w => t.includes(w)).length;
+  const songHits   = songWords.filter(w => t.includes(w)).length;
+
+  const artistScore = artistWords.length ? artistHits / artistWords.length : 1;
+  const songScore   = songWords.length   ? songHits   / songWords.length   : 1;
+
+  // Artist match is weighted more heavily — a wrong artist is worse than a wrong song title
+  return artistScore * 0.6 + songScore * 0.4;
+}
+
+async function youtubeSearchScrape(q: string, artist: string, song: string): Promise<string | null> {
   const resp = await axios.get('https://www.youtube.com/results', {
     params: { search_query: q },
     headers: {
@@ -141,13 +161,41 @@ async function youtubeSearchScrape(q: string): Promise<string | null> {
     timeout: 10000,
   });
   const html: string = resp.data;
-  const match = html.match(/"videoId":"([a-zA-Z0-9_-]{11})"/);
-  return match ? match[1] : null;
+
+  // Extract up to 10 {videoId, title} pairs from the ytInitialData JSON blob
+  const candidates: Array<{ videoId: string; title: string }> = [];
+  const videoRegex = /"videoId":"([a-zA-Z0-9_-]{11})","thumbnail":.*?"title":\{"runs":\[\{"text":"([^"]+)"/g;
+  let m: RegExpExecArray | null;
+  while ((m = videoRegex.exec(html)) !== null && candidates.length < 10) {
+    candidates.push({ videoId: m[1], title: m[2] });
+  }
+
+  // Fallback: grab just the first videoId if the richer pattern matched nothing
+  if (candidates.length === 0) {
+    const simple = html.match(/"videoId":"([a-zA-Z0-9_-]{11})"/);
+    return simple ? simple[1] : null;
+  }
+
+  // Deduplicate by videoId
+  const seen = new Set<string>();
+  const unique = candidates.filter(c => { if (seen.has(c.videoId)) return false; seen.add(c.videoId); return true; });
+
+  // Pick the highest-scoring result; reject if score is too low
+  let best = unique[0];
+  let bestScore = scoreYouTubeTitle(best.title, artist, song);
+  for (const c of unique.slice(1)) {
+    const s = scoreYouTubeTitle(c.title, artist, song);
+    if (s > bestScore) { best = c; bestScore = s; }
+  }
+
+  const MIN_SCORE = 0.4;
+  return bestScore >= MIN_SCORE ? best.videoId : null;
 }
 
 app.get('/api/youtube-search', async (req: any, res: any) => {
   const q = req.query.q as string;
   const artist = (req.query.artist as string || '').trim();
+  const song   = (req.query.song   as string || '').trim();
   if (!q) return res.status(400).json({ error: 'Missing query' });
 
   // Check for a manual override / removal for this artist
@@ -168,20 +216,31 @@ app.get('/api/youtube-search', async (req: any, res: any) => {
   if (apiKey) {
     try {
       const resp = await axios.get('https://www.googleapis.com/youtube/v3/search', {
-        params: { key: apiKey, q, part: 'snippet', type: 'video', maxResults: 1 },
+        params: { key: apiKey, q, part: 'snippet', type: 'video', maxResults: 5 },
         headers: { Referer: 'https://upcoming-shows.vercel.app/' },
         timeout: 8000,
       });
       const items: any[] = resp.data?.items || [];
       if (items.length === 0) return res.json({ videoId: null });
-      return res.json({ videoId: items[0].id.videoId });
+
+      // Score each result and pick the best match
+      let best = items[0];
+      let bestScore = scoreYouTubeTitle(items[0].snippet?.title || '', artist, song);
+      for (const item of items.slice(1)) {
+        const s = scoreYouTubeTitle(item.snippet?.title || '', artist, song);
+        if (s > bestScore) { best = item; bestScore = s; }
+      }
+
+      const MIN_SCORE = 0.4;
+      const videoId = bestScore >= MIN_SCORE ? best.id.videoId : null;
+      return res.json({ videoId });
     } catch (err: any) {
       console.error('[youtube-search] API key failed, falling back to scrape:', err.message);
     }
   }
 
   try {
-    const videoId = await youtubeSearchScrape(q);
+    const videoId = await youtubeSearchScrape(q, artist, song);
     res.json({ videoId });
   } catch (err: any) {
     console.error('[youtube-search]', err.message);

@@ -1164,8 +1164,9 @@
 
             let videoId = null;
             try {
-                const q = `${artistName} ${songName} official audio`;
-                const resp = await fetch(`/api/youtube-search?q=${encodeURIComponent(q)}&artist=${encodeURIComponent(artistName)}`);
+                const q = `${artistName} ${songName}`;
+                const url = `/api/youtube-search?q=${encodeURIComponent(q)}&artist=${encodeURIComponent(artistName)}&song=${encodeURIComponent(songName)}`;
+                const resp = await fetch(url);
                 const data = await resp.json();
                 videoId = data.videoId || null;
             } catch (e) { videoId = null; }
