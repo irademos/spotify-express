@@ -1116,6 +1116,8 @@
                     onStateChange: function (e) {
                         const btn = document.getElementById('ytPlayPauseBtn');
                         if (e.data === YT.PlayerState.PLAYING) {
+                            // Show the card only once the video is actually playing
+                            document.getElementById('yt-player-card').classList.add('visible');
                             btn.textContent = '⏸';
                             document.querySelectorAll('.play-btn').forEach(b => {
                                 b.classList.toggle('active', parseInt(b.dataset.idx) === activeShowIdx
@@ -1190,7 +1192,8 @@
 
             document.getElementById('ytArtistName').textContent = artistName;
             document.getElementById('ytSongName').textContent   = songName;
-            document.getElementById('yt-player-card').classList.add('visible');
+            // Card becomes visible in onStateChange(PLAYING) so a blocked/non-embeddable
+            // video never flashes on screen before the error handler closes it.
 
             if (ytReady && ytPlayer) ytPlayer.loadVideoById(videoId);
         }

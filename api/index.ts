@@ -136,8 +136,9 @@ app.get('/explore', function (req: any, res: any) {
 function scoreYouTubeTitle(title: string, artist: string, song: string): number {
   const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
   const t = norm(title);
-  const artistWords = norm(artist).split(' ').filter(w => w.length > 1);
-  const songWords   = norm(song).split(' ').filter(w => w.length > 1);
+  // Keep single-letter tokens too — needed for acronym-style names like "S.I.M.P.L.E"
+  const artistWords = norm(artist).split(' ').filter(w => w.length > 0);
+  const songWords   = norm(song).split(' ').filter(w => w.length > 0);
 
   if (artistWords.length === 0 && songWords.length === 0) return 0.5;
 
@@ -195,20 +196,28 @@ async function youtubeSearchScrape(q: string, artist: string, song: string): Pro
   });
   const html: string = resp.data;
 
-  // Extract up to 10 {videoId, title, durationSecs} entries from the ytInitialData JSON blob.
+  // Extract up to 10 {videoId, title, durationSecs, channel} entries from the ytInitialData JSON blob.
   // Duration appears as "lengthText":{"accessibility":...,"simpleText":"4:32"}
-  const candidates: Array<{ videoId: string; title: string; durationSecs: number }> = [];
-  const videoRegex = /"videoId":"([a-zA-Z0-9_-]{11})","thumbnail":.*?"title":\{"runs":\[\{"text":"([^"]+)".*?"lengthText":\{[^}]*"simpleText":"([^"]+)"/g;
+  const candidates: Array<{ videoId: string; title: string; durationSecs: number; channel: string }> = [];
+  const videoRegex = /"videoId":"([a-zA-Z0-9_-]{11})","thumbnail":.*?"title":\{"runs":\[\{"text":"([^"]+)".*?"lengthText":\{[^}]*"simpleText":"([^"]+)".*?"ownerText":\{"runs":\[\{"text":"([^"]+)"/g;
   let m: RegExpExecArray | null;
   while ((m = videoRegex.exec(html)) !== null && candidates.length < 10) {
-    candidates.push({ videoId: m[1], title: m[2], durationSecs: parseHumanDuration(m[3]) });
+    candidates.push({ videoId: m[1], title: m[2], durationSecs: parseHumanDuration(m[3]), channel: m[4] });
   }
 
-  // Looser fallback: title without duration
+  // Looser fallback: title + duration, no channel
   if (candidates.length === 0) {
-    const videoRegex2 = /"videoId":"([a-zA-Z0-9_-]{11})","thumbnail":.*?"title":\{"runs":\[\{"text":"([^"]+)"/g;
+    const videoRegex2 = /"videoId":"([a-zA-Z0-9_-]{11})","thumbnail":.*?"title":\{"runs":\[\{"text":"([^"]+)".*?"lengthText":\{[^}]*"simpleText":"([^"]+)"/g;
     while ((m = videoRegex2.exec(html)) !== null && candidates.length < 10) {
-      candidates.push({ videoId: m[1], title: m[2], durationSecs: 0 });
+      candidates.push({ videoId: m[1], title: m[2], durationSecs: parseHumanDuration(m[3]), channel: '' });
+    }
+  }
+
+  // Looser fallback: title only
+  if (candidates.length === 0) {
+    const videoRegex3 = /"videoId":"([a-zA-Z0-9_-]{11})","thumbnail":.*?"title":\{"runs":\[\{"text":"([^"]+)"/g;
+    while ((m = videoRegex3.exec(html)) !== null && candidates.length < 10) {
+      candidates.push({ videoId: m[1], title: m[2], durationSecs: 0, channel: '' });
     }
   }
 
@@ -222,11 +231,16 @@ async function youtubeSearchScrape(q: string, artist: string, song: string): Pro
   const seen = new Set<string>();
   const unique = candidates.filter(c => { if (seen.has(c.videoId)) return false; seen.add(c.videoId); return true; });
 
-  // Pick the highest combined score; reject if title score alone is too low
+  // Pick the highest combined score; penalize Vevo channels (likely non-embeddable)
+  const scoreEntry = (c: typeof unique[0]) => {
+    const base = scoreCandidate(c.title, c.durationSecs, artist, song);
+    return /vevo/i.test(c.channel) ? base * 0.5 : base;
+  };
+
   let best = unique[0];
-  let bestScore = scoreCandidate(best.title, best.durationSecs, artist, song);
+  let bestScore = scoreEntry(unique[0]);
   for (const c of unique.slice(1)) {
-    const s = scoreCandidate(c.title, c.durationSecs, artist, song);
+    const s = scoreEntry(c);
     if (s > bestScore) { best = c; bestScore = s; }
   }
 
@@ -265,23 +279,35 @@ app.get('/api/youtube-search', async (req: any, res: any) => {
       const items: any[] = searchResp.data?.items || [];
       if (items.length === 0) return res.json({ videoId: null });
 
-      // Fetch durations for all candidate videos in one call
+      // Fetch duration + embeddability for all candidates in one call
       const ids = items.map((i: any) => i.id.videoId).join(',');
-      const durResp = await axios.get('https://www.googleapis.com/youtube/v3/videos', {
-        params: { key: apiKey, id: ids, part: 'contentDetails' },
+      const detailResp = await axios.get('https://www.googleapis.com/youtube/v3/videos', {
+        params: { key: apiKey, id: ids, part: 'contentDetails,status' },
         headers: { Referer: 'https://upcoming-shows.vercel.app/' },
         timeout: 6000,
       });
       const durMap: Record<string, number> = {};
-      for (const v of (durResp.data?.items || [])) {
+      const embeddable: Set<string> = new Set();
+      for (const v of (detailResp.data?.items || [])) {
         durMap[v.id] = parseIsoDuration(v.contentDetails?.duration || '');
+        if (v.status?.embeddable !== false) embeddable.add(v.id);
       }
 
-      // Score each result and pick the best combined match
-      let best = items[0];
-      let bestScore = scoreCandidate(items[0].snippet?.title || '', durMap[items[0].id.videoId] ?? 0, artist, song);
-      for (const item of items.slice(1)) {
-        const s = scoreCandidate(item.snippet?.title || '', durMap[item.id.videoId] ?? 0, artist, song);
+      // Only consider embeddable videos; fall back to all if none are embeddable
+      const candidates = items.filter((i: any) => embeddable.has(i.id.videoId));
+      const pool = candidates.length > 0 ? candidates : items;
+
+      // Score each result; penalize Vevo channels (they often block embedding)
+      const isVevo = (item: any) => /vevo/i.test(item.snippet?.channelTitle || '');
+      const scoreItem = (item: any) => {
+        const base = scoreCandidate(item.snippet?.title || '', durMap[item.id.videoId] ?? 0, artist, song);
+        return isVevo(item) ? base * 0.5 : base;
+      };
+
+      let best = pool[0];
+      let bestScore = scoreItem(pool[0]);
+      for (const item of pool.slice(1)) {
+        const s = scoreItem(item);
         if (s > bestScore) { best = item; bestScore = s; }
       }
 
