@@ -335,6 +335,7 @@ document.addEventListener('DOMContentLoaded', function () {
             // Detect natural song end: was playing at a non-zero position, now paused at 0
             if (isPlaying && state.paused && state.position === 0 && lastPosition > 5000) {
                 isPlaying = false;
+                updateAllPlayButtons(); // clear pause symbols while next track loads
                 playNextArtist();
                 return;
             }
@@ -750,6 +751,10 @@ document.addEventListener('DOMContentLoaded', function () {
                             updateAllPlayButtons();
                         }
                     } else {
+                        // Clear current state immediately so no stale pause symbols linger
+                        currentPlayingKey = null;
+                        isPlaying = false;
+                        updateAllPlayButtons();
                         await playShow(show, idx);
                     }
                 });
