@@ -505,45 +505,49 @@
             .config-row { gap: 8px; }
             #triggerScrapeBtn { font-size: 12px; padding: 5px 9px; }
 
-            /* Show item: date col | (venue top-right, artists below) */
+            /* Show item: (date, venue) left col | artists right col */
             .show-item {
-                grid-template-columns: 104px 1fr;
+                grid-template-columns: 100px 1fr;
                 grid-template-areas:
-                    "date venue"
-                    "date artists";
-                gap: 6px 8px;
+                    "date    artists"
+                    "venue   artists";
+                gap: 4px 10px;
                 padding: 12px 0;
             }
             .show-item--playing { padding-left: 6px; padding-right: 6px; }
-            .show-date-cell { grid-area: date; }
+            .show-date-cell { grid-area: date; align-self: start; }
+            .show-venue-name {
+                grid-area: venue;
+                text-align: left !important;
+                align-self: start;
+                align-items: flex-start !important;
+                justify-content: flex-start !important;
+                font-size: 12px;
+                margin-top: 0;
+            }
             .show-artists {
                 grid-area: artists;
                 flex-direction: column;
                 align-items: flex-start;
+                align-self: start;
                 font-size: 14px;
                 gap: 5px;
             }
             .show-artists .artist-chip-sep { display: none; }
-            .show-venue-name {
-                grid-area: venue;
-                text-align: right;
-                align-self: start;
-                font-size: 12px;
-                margin-top: 0;
-                justify-content: flex-end;
-            }
             .artist-avatar { width: 30px; height: 30px; }
             .show-date .date-main { font-size: 15px; }
             .play-btn { width: 24px; height: 24px; min-width: 24px; font-size: 10px; }
 
-            /* Floating player — centered, full width */
+            /* Floating player — full width, clear browser chrome */
             #yt-player-card {
                 left: 12px;
                 right: 12px;
                 width: auto;
-                bottom: 12px;
+                bottom: 60px;
+                overflow: hidden;
             }
-            #yt-iframe-container iframe { width: 100% !important; }
+            /* YT API replaces the div with an iframe using the same id */
+            #yt-iframe-container { width: 100% !important; }
         }
     </style>
 </head>
