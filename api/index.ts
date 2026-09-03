@@ -214,32 +214,35 @@ async function scrapeCandidates(query: string): Promise<ScrapeCandidate[]> {
     timeout: 10000,
   });
   const html: string = resp.data;
-  const out: ScrapeCandidate[] = [];
 
-  // Full metadata: videoId + title + duration + channel
-  const r1 = /"videoId":"([a-zA-Z0-9_-]{11})","thumbnail":.*?"title":\{"runs":\[\{"text":"([^"]+)".*?"lengthText":\{[^}]*"simpleText":"([^"]+)".*?"ownerText":\{"runs":\[\{"text":"([^"]+)"/g;
+  // Step 1: extract all (videoId, title) pairs — this pattern reliably matches.
+  // The .*? between "thumbnail" and "title" spans only a few hundred chars (thumbnail obj),
+  // not the full renderer, so it doesn't cross into the next video entry.
+  const titleRe = /"videoId":"([a-zA-Z0-9_-]{11})","thumbnail":\{"thumbnails":\[.*?\]\},"title":\{"runs":\[\{"text":"([^"]+)"/g;
+  const entries: Array<{ videoId: string; title: string; pos: number }> = [];
   let m: RegExpExecArray | null;
-  while ((m = r1.exec(html)) !== null && out.length < 15) {
-    out.push({ videoId: m[1], title: m[2], durationSecs: parseHumanDuration(m[3]), channel: m[4] });
+  while ((m = titleRe.exec(html)) !== null && entries.length < 15) {
+    entries.push({ videoId: m[1], title: m[2], pos: m.index });
   }
 
-  if (out.length === 0) {
-    // title + duration, no channel
-    const r2 = /"videoId":"([a-zA-Z0-9_-]{11})","thumbnail":.*?"title":\{"runs":\[\{"text":"([^"]+)".*?"lengthText":\{[^}]*"simpleText":"([^"]+)"/g;
-    while ((m = r2.exec(html)) !== null && out.length < 15) {
-      out.push({ videoId: m[1], title: m[2], durationSecs: parseHumanDuration(m[3]), channel: '' });
-    }
+  // Step 2: for each entry, scan forward up to 4 KB to find duration and channel.
+  // These fields always appear after the title in the same videoRenderer object.
+  const out: ScrapeCandidate[] = [];
+  for (const entry of entries) {
+    const chunk = html.slice(entry.pos, entry.pos + 4000);
+
+    const durM = chunk.match(/"lengthText":\{"accessibility":\{"accessibilityData":\{"label":"[^"]*"\}\},"simpleText":"([^"]+)"/);
+    const durFallback = chunk.match(/"simpleText":"(\d+:\d+(?::\d+)?)"/);
+    const durationSecs = durM ? parseHumanDuration(durM[1])
+                       : durFallback ? parseHumanDuration(durFallback[1]) : 0;
+
+    const chM = chunk.match(/"ownerText":\{"runs":\[\{"text":"([^"]+)"/);
+    const channel = chM ? chM[1] : '';
+
+    out.push({ videoId: entry.videoId, title: entry.title, durationSecs, channel });
   }
 
-  if (out.length === 0) {
-    // title only
-    const r3 = /"videoId":"([a-zA-Z0-9_-]{11})","thumbnail":.*?"title":\{"runs":\[\{"text":"([^"]+)"/g;
-    while ((m = r3.exec(html)) !== null && out.length < 15) {
-      out.push({ videoId: m[1], title: m[2], durationSecs: 0, channel: '' });
-    }
-  }
-
-  // Deduplicate
+  // Deduplicate by videoId
   const seen = new Set<string>();
   return out.filter(c => { if (seen.has(c.videoId)) return false; seen.add(c.videoId); return true; });
 }
