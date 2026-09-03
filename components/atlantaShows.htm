@@ -578,11 +578,28 @@
             border-top: 1px solid var(--border-light);
         }
 
-        @media (max-width: 560px) {
-            .show-item { grid-template-columns: 120px 1fr; }
-            .show-venue-name { text-align: left; grid-column: 2; margin-top: -8px; }
-            .artist-avatar { width: 32px; height: 32px; }
-            .config-label { min-width: 80px; }
+        @media (max-width: 600px) {
+            body { padding: 12px 8px 100px; }
+
+            .page-card { padding: 16px 14px 32px; border-radius: 6px; }
+
+            .page-header { gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+            .page-header h1 { font-size: 1.3rem; }
+            .back-btn { padding: 6px 10px; font-size: 13px; }
+            .admin-link { padding: 4px 8px; font-size: 11px; }
+
+            .config-section { padding: 10px 12px; }
+            .config-label { min-width: 60px; font-size: 12px; }
+            .city-select { min-width: 120px; font-size: 13px; }
+            .dropdown-trigger { min-width: 0; width: 100%; font-size: 13px; }
+            .config-row { gap: 8px; }
+
+            .show-item { grid-template-columns: 104px 1fr; gap: 8px; padding: 12px 0; }
+            .show-venue-name { text-align: left; grid-column: 2; margin-top: -6px; font-size: 12px; }
+            .artist-avatar { width: 30px; height: 30px; }
+            .show-date .date-main { font-size: 15px; }
+            .show-artists { font-size: 14px; gap: 4px; }
+            .play-btn { width: 24px; height: 24px; min-width: 24px; font-size: 10px; }
         }
     </style>
 </head>
