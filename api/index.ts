@@ -131,9 +131,82 @@ app.get('/explore', function (req: any, res: any) {
   res.sendFile(path.join(__dirname, '..', 'components', 'explore.htm'));
 });
 
-async function youtubeSearchScrape(q: string): Promise<string | null> {
+// Score how well a YouTube video title matches the expected artist + song.
+// Returns a value 0–1; higher is better.
+function scoreYouTubeTitle(title: string, artist: string, song: string): number {
+  const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+  const t = norm(title);
+  // Keep single-letter tokens too — needed for acronym-style names like "S.I.M.P.L.E"
+  const artistWords = norm(artist).split(' ').filter(w => w.length > 0);
+  const songWords   = norm(song).split(' ').filter(w => w.length > 0);
+
+  if (artistWords.length === 0 && songWords.length === 0) return 0.5;
+
+  const artistHits = artistWords.filter(w => t.includes(w)).length;
+  const songHits   = songWords.filter(w => t.includes(w)).length;
+
+  const artistScore = artistWords.length ? artistHits / artistWords.length : 1;
+  const songScore   = songWords.length   ? songHits   / songWords.length   : 1;
+
+  // Artist match is weighted more heavily — a wrong artist is worse than a wrong song title
+  return artistScore * 0.6 + songScore * 0.4;
+}
+
+// Score video duration for how likely it is a single song (not a live set / full album).
+// Peaks around 2.5–5 min, tapers for longer videos. Returns 0–1.
+function scoreDuration(seconds: number): number {
+  if (seconds <= 0) return 0.5; // unknown duration — neutral
+  if (seconds < 60) return 0.2; // too short (clip / teaser)
+  if (seconds <= 300) return 1.0; // 1–5 min: ideal song length
+  if (seconds <= 480) return 0.85; // 5–8 min: acceptable (longer tracks)
+  if (seconds <= 600) return 0.6; // 8–10 min: probably live or extended
+  if (seconds <= 900) return 0.35; // 10–15 min: likely a set / medley
+  return 0.1; // 15+ min: almost certainly not a single song
+}
+
+// Parse ISO 8601 duration (e.g. "PT4M32S") to seconds.
+function parseIsoDuration(iso: string): number {
+  const m = iso.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+  if (!m) return 0;
+  return (parseInt(m[1] || '0') * 3600) + (parseInt(m[2] || '0') * 60) + parseInt(m[3] || '0');
+}
+
+// Parse a human-readable duration string (e.g. "4:32", "1:02:15") to seconds.
+function parseHumanDuration(s: string): number {
+  const parts = s.split(':').map(Number);
+  if (parts.some(isNaN)) return 0;
+  if (parts.length === 2) return parts[0] * 60 + parts[1];
+  if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+  return 0;
+}
+
+// Prefer embeddable-friendly upload types; penalize official music videos (Vevo-hosted).
+// Returns an additive bonus in the range [-0.15, +0.10].
+function scoreUploadType(title: string): number {
+  const t = title.toLowerCase();
+  if (/full album|album stream/.test(t))      return -0.60; // definitely not a single song
+  if (/full set|\bfull show\b/.test(t))       return -0.50;
+  if (/official music video|\bomv\b/.test(t)) return -0.15; // typically Vevo, non-embeddable
+  if (/official audio/.test(t))               return  0.10; // artist channel, always embeddable
+  if (/official visuali[sz]er/.test(t))       return  0.08;
+  if (/lyric(s| video)/.test(t))              return  0.05;
+  if (/\baudio\b/.test(t))                    return  0.05;
+  if (/\blive\b/.test(t))                     return -0.05; // live ≠ studio recording
+  if (/slowed|reverb|\bremix\b/.test(t))      return -0.05; // altered versions
+  return 0;
+}
+
+// Combined relevance score (title match + upload type + duration).
+function scoreCandidate(title: string, durationSecs: number, artist: string, song: string): number {
+  const base = scoreYouTubeTitle(title, artist, song) * 0.75 + scoreDuration(durationSecs) * 0.20;
+  return Math.max(0, base + scoreUploadType(title) * 0.05);
+}
+
+type ScrapeCandidate = { videoId: string; title: string; durationSecs: number; channel: string };
+
+async function scrapeCandidates(query: string): Promise<ScrapeCandidate[]> {
   const resp = await axios.get('https://www.youtube.com/results', {
-    params: { search_query: q },
+    params: { search_query: query },
     headers: {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
       'Accept-Language': 'en-US,en;q=0.9',
@@ -141,13 +214,85 @@ async function youtubeSearchScrape(q: string): Promise<string | null> {
     timeout: 10000,
   });
   const html: string = resp.data;
-  const match = html.match(/"videoId":"([a-zA-Z0-9_-]{11})"/);
-  return match ? match[1] : null;
+
+  // Step 1: extract all (videoId, title) pairs — this pattern reliably matches.
+  // The .*? between "thumbnail" and "title" spans only a few hundred chars (thumbnail obj),
+  // not the full renderer, so it doesn't cross into the next video entry.
+  const titleRe = /"videoId":"([a-zA-Z0-9_-]{11})","thumbnail":\{"thumbnails":\[.*?\]\},"title":\{"runs":\[\{"text":"([^"]+)"/g;
+  const entries: Array<{ videoId: string; title: string; pos: number }> = [];
+  let m: RegExpExecArray | null;
+  while ((m = titleRe.exec(html)) !== null && entries.length < 15) {
+    entries.push({ videoId: m[1], title: m[2], pos: m.index });
+  }
+
+  // Step 2: for each entry, scan forward up to 4 KB to find duration and channel.
+  // These fields always appear after the title in the same videoRenderer object.
+  const out: ScrapeCandidate[] = [];
+  for (const entry of entries) {
+    const chunk = html.slice(entry.pos, entry.pos + 4000);
+
+    const durM = chunk.match(/"lengthText":\{"accessibility":\{"accessibilityData":\{"label":"[^"]*"\}\},"simpleText":"([^"]+)"/);
+    const durFallback = chunk.match(/"simpleText":"(\d+:\d+(?::\d+)?)"/);
+    const durationSecs = durM ? parseHumanDuration(durM[1])
+                       : durFallback ? parseHumanDuration(durFallback[1]) : 0;
+
+    const chM = chunk.match(/"ownerText":\{"runs":\[\{"text":"([^"]+)"/);
+    const channel = chM ? chM[1] : '';
+
+    out.push({ videoId: entry.videoId, title: entry.title, durationSecs, channel });
+  }
+
+  // Deduplicate by videoId
+  const seen = new Set<string>();
+  return out.filter(c => { if (seen.has(c.videoId)) return false; seen.add(c.videoId); return true; });
+}
+
+async function youtubeSearchScrape(q: string, artist: string, song: string): Promise<string[]> {
+  let candidates = await scrapeCandidates(q);
+
+  if (candidates.length === 0) {
+    // Last-resort: plain regex for videoId with no metadata
+    const resp = await axios.get('https://www.youtube.com/results', {
+      params: { search_query: q },
+      headers: { 'User-Agent': 'Mozilla/5.0', 'Accept-Language': 'en-US,en;q=0.9' },
+      timeout: 10000,
+    });
+    const simple = (resp.data as string).match(/"videoId":"([a-zA-Z0-9_-]{11})"/);
+    return simple ? [simple[1]] : [];
+  }
+
+  const nonVevo = candidates.filter(c => !/vevo/i.test(c.channel));
+  console.log(`[yt-scrape] query="${q}" found=${candidates.length} nonVevo=${nonVevo.length}`);
+  candidates.forEach(c => console.log(`  [yt-scrape]   ${c.videoId} ch="${c.channel}" dur=${c.durationSecs}s title="${c.title}"`));
+
+  // If every result is Vevo, retry with "topic" to find an auto-generated channel
+  if (nonVevo.length === 0 && candidates.every(c => c.channel !== '')) {
+    console.log(`[yt-scrape] all Vevo, retrying with topic query`);
+    const topicCandidates = await scrapeCandidates(`${q} topic`);
+    const topicNonVevo = topicCandidates.filter(c => !/vevo/i.test(c.channel));
+    console.log(`[yt-scrape] topic retry: found=${topicCandidates.length} nonVevo=${topicNonVevo.length}`);
+    if (topicNonVevo.length > 0) candidates = topicNonVevo;
+    else if (topicCandidates.length > 0) candidates = topicCandidates;
+  } else if (nonVevo.length > 0) {
+    candidates = nonVevo;
+  }
+
+  const MIN_TITLE_SCORE = 0.4;
+  const sorted = candidates
+    .map(c => ({ ...c, score: scoreCandidate(c.title, c.durationSecs, artist, song), titleScore: scoreYouTubeTitle(c.title, artist, song) }))
+    .filter(c => c.titleScore >= MIN_TITLE_SCORE)
+    .sort((a, b) => b.score - a.score);
+
+  const top3 = sorted.slice(0, 3);
+  console.log(`[yt-scrape] returning top ${top3.length} candidates`);
+  top3.forEach(c => console.log(`  [yt-scrape]   ${c.videoId} score=${c.score.toFixed(2)} ch="${c.channel}" title="${c.title}"`));
+  return top3.map(c => c.videoId);
 }
 
 app.get('/api/youtube-search', async (req: any, res: any) => {
   const q = req.query.q as string;
   const artist = (req.query.artist as string || '').trim();
+  const song   = (req.query.song   as string || '').trim();
   if (!q) return res.status(400).json({ error: 'Missing query' });
 
   // Check for a manual override / removal for this artist
@@ -167,22 +312,78 @@ app.get('/api/youtube-search', async (req: any, res: any) => {
 
   if (apiKey) {
     try {
-      const resp = await axios.get('https://www.googleapis.com/youtube/v3/search', {
-        params: { key: apiKey, q, part: 'snippet', type: 'video', maxResults: 1 },
-        headers: { Referer: 'https://upcoming-shows.vercel.app/' },
-        timeout: 8000,
-      });
-      const items: any[] = resp.data?.items || [];
-      if (items.length === 0) return res.json({ videoId: null });
-      return res.json({ videoId: items[0].id.videoId });
+      const isVevo = (item: any) => /vevo/i.test(item.snippet?.channelTitle || '');
+
+      // Helper: search + fetch details, return scored pool filtered to non-Vevo where possible
+      const searchAndFilter = async (query: string) => {
+        const searchResp = await axios.get('https://www.googleapis.com/youtube/v3/search', {
+          params: { key: apiKey, q: query, part: 'snippet', type: 'video', maxResults: 10 },
+          headers: { Referer: 'https://upcoming-shows.vercel.app/' },
+          timeout: 8000,
+        });
+        const found: any[] = searchResp.data?.items || [];
+        if (found.length === 0) return { pool: [], durMap: {} as Record<string, number> };
+
+        const ids = found.map((i: any) => i.id.videoId).join(',');
+        const detailResp = await axios.get('https://www.googleapis.com/youtube/v3/videos', {
+          params: { key: apiKey, id: ids, part: 'contentDetails,status' },
+          headers: { Referer: 'https://upcoming-shows.vercel.app/' },
+          timeout: 6000,
+        });
+        const durMap: Record<string, number> = {};
+        const embeddable: Set<string> = new Set();
+        for (const v of (detailResp.data?.items || [])) {
+          durMap[v.id] = parseIsoDuration(v.contentDetails?.duration || '');
+          if (v.status?.embeddable !== false) embeddable.add(v.id);
+        }
+
+        const embeddableNonVevo = found.filter((i: any) => embeddable.has(i.id.videoId) && !isVevo(i));
+        const nonVevo           = found.filter((i: any) => !isVevo(i));
+        console.log(`[yt] query="${query}" found=${found.length} embeddable=${embeddable.size} nonVevo=${nonVevo.length} embeddableNonVevo=${embeddableNonVevo.length}`);
+        found.forEach((i: any) => console.log(`  [yt]   ${i.id.videoId} ch="${i.snippet?.channelTitle}" emb=${embeddable.has(i.id.videoId)} title="${i.snippet?.title}"`));
+        // Return the best non-Vevo pool we have; null pool signals all-Vevo results
+        const pool = embeddableNonVevo.length > 0 ? embeddableNonVevo
+                   : nonVevo.length > 0           ? nonVevo
+                   : null;
+        return { pool, durMap };
+      };
+
+      let { pool, durMap } = await searchAndFilter(q);
+
+      // If all results were Vevo, retry with "topic" appended — YouTube Topic channels
+      // are auto-generated, always embeddable, and exist for most mainstream artists.
+      if (!pool) {
+        console.log(`[yt] all Vevo on first pass, retrying with topic query`);
+        const retry = await searchAndFilter(`${q} topic`);
+        pool = retry.pool ?? []; // accept Vevo as last resort if topic search also fails
+        durMap = { ...durMap, ...retry.durMap };
+        if (pool.length === 0) { console.log(`[yt] topic retry also empty, returning null`); return res.json({ videoId: null }); }
+      }
+
+      // Sort pool by combined score descending
+      const scored = pool.map((item: any) => ({
+        item,
+        score: scoreCandidate(item.snippet?.title || '', durMap[item.id.videoId] ?? 0, artist, song),
+        titleScore: scoreYouTubeTitle(item.snippet?.title || '', artist, song),
+      })).sort((a: any, b: any) => b.score - a.score);
+
+      const MIN_TITLE_SCORE = 0.4;
+      const videoIds = scored
+        .filter((r: any) => r.titleScore >= MIN_TITLE_SCORE)
+        .slice(0, 3)
+        .map((r: any) => r.item.id.videoId);
+
+      console.log(`[yt] returning videoIds=${JSON.stringify(videoIds)} scores=${scored.slice(0,3).map((r:any) => r.score.toFixed(2)).join(',')}`);
+      scored.slice(0, 3).forEach((r: any) => console.log(`  [yt]   ${r.item.id.videoId} score=${r.score.toFixed(2)} ch="${r.item.snippet?.channelTitle}" title="${r.item.snippet?.title}"`));
+      return res.json({ videoId: videoIds[0] ?? null, videoIds });
     } catch (err: any) {
       console.error('[youtube-search] API key failed, falling back to scrape:', err.message);
     }
   }
 
   try {
-    const videoId = await youtubeSearchScrape(q);
-    res.json({ videoId });
+    const videoIds = await youtubeSearchScrape(q, artist, song);
+    res.json({ videoId: videoIds[0] ?? null, videoIds });
   } catch (err: any) {
     console.error('[youtube-search]', err.message);
     res.status(500).json({ error: 'Search failed' });
