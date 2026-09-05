@@ -779,7 +779,7 @@ document.addEventListener('DOMContentLoaded', function () {
             const venueLink = document.createElement('a');
             venueLink.className = 'venue-link';
             venueLink.textContent = show.venue;
-            venueLink.href = `https://www.google.com/maps/search/${encodeURIComponent(show.venue + ' Atlanta GA')}`;
+            venueLink.href = `https://www.google.com/maps/search/${encodeURIComponent(show.venue + ' ' + selectedCity)}`;
             venueLink.target = '_blank';
             venueLink.rel = 'noopener noreferrer';
             venueDiv.appendChild(venueLink);
