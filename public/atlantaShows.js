@@ -51,6 +51,9 @@ document.addEventListener('DOMContentLoaded', function () {
             const row = document.createElement('div');
             row.className = 'scrape-venue-item';
 
+            const info = document.createElement('div');
+            info.className = 'scrape-venue-info';
+
             const name = document.createElement('span');
             name.className = 'scrape-venue-name';
             name.textContent = v.name || '(unnamed)';
@@ -60,6 +63,9 @@ document.addEventListener('DOMContentLoaded', function () {
             idSpan.className = 'scrape-venue-id';
             idSpan.textContent = v.id;
             idSpan.title = v.id;
+
+            info.appendChild(name);
+            info.appendChild(idSpan);
 
             const reportBtn = document.createElement('button');
             reportBtn.className = 'report-venue-btn';
@@ -72,8 +78,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 reportVenue(selectedCity, v.id, v.name);
             });
 
-            row.appendChild(name);
-            row.appendChild(idSpan);
+            row.appendChild(info);
             row.appendChild(reportBtn);
             list.appendChild(row);
         });
