@@ -239,8 +239,10 @@
             border-radius: 4px;
             box-shadow: 0 4px 14px var(--shadow);
             min-width: 260px;
+            max-width: calc(100vw - 16px);
             max-height: 340px;
             overflow-y: auto;
+            overflow-x: hidden;
         }
         .dropdown-panel.open { display: block; }
 
@@ -266,7 +268,7 @@
             width: 15px; height: 15px; cursor: pointer;
             flex-shrink: 0; accent-color: #1db954;
         }
-        .venue-item label { cursor: pointer; font-size: 14px; color: var(--text-primary); line-height: 1.3; }
+        .venue-item label { cursor: pointer; font-size: 14px; color: var(--text-primary); line-height: 1.3; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
         /* Scrape venue list */
         .scrape-venue-item {
@@ -276,8 +278,13 @@
         }
         .scrape-venue-item:hover { background: var(--surface-item-hover); }
 
+        .scrape-venue-info {
+            flex: 1; min-width: 0;
+            display: flex; flex-direction: column; gap: 2px;
+        }
+
         .scrape-venue-name {
-            flex: 1; overflow: hidden;
+            overflow: hidden;
             text-overflow: ellipsis; white-space: nowrap;
         }
 
@@ -285,7 +292,6 @@
             font-size: 11px; color: var(--text-muted);
             font-family: monospace; overflow: hidden;
             text-overflow: ellipsis; white-space: nowrap;
-            max-width: 140px;
         }
 
         .scrape-venue-count {
@@ -810,8 +816,11 @@
                     reportVenue(selectedCity, v.id, v.name);
                 });
 
-                row.appendChild(name);
-                row.appendChild(idSpan);
+                const info = document.createElement('div');
+                info.className = 'scrape-venue-info';
+                info.appendChild(name);
+                info.appendChild(idSpan);
+                row.appendChild(info);
                 row.appendChild(reportBtn);
                 list.appendChild(row);
             });
@@ -829,6 +838,7 @@
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
                 reportedVenueIds.add(venueId);
                 renderScrapeVenues();
+                buildVenueCheckboxes();
                 showToast('Venue reported');
             } catch (err) {
                 showToast('Failed to report venue');
@@ -1117,7 +1127,17 @@
                 const lbl = document.createElement('label');
                 lbl.htmlFor = cbId;
                 lbl.textContent = v.displayName;
-                item.appendChild(cb); item.appendChild(lbl);
+                const reportBtn = document.createElement('button');
+                reportBtn.className = 'report-venue-btn';
+                const alreadyReported = reportedVenueIds.has(v.id);
+                reportBtn.textContent = alreadyReported ? '✓' : '⚑';
+                reportBtn.title = alreadyReported ? 'Already reported' : 'Report venue';
+                reportBtn.disabled = alreadyReported;
+                reportBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    reportVenue(selectedCity, v.id, v.name);
+                });
+                item.appendChild(cb); item.appendChild(lbl); item.appendChild(reportBtn);
                 container.appendChild(item);
             });
         }

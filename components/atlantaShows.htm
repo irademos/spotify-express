@@ -158,8 +158,10 @@
             border-radius: 4px;
             box-shadow: 0 4px 14px var(--shadow);
             min-width: 260px;
+            max-width: calc(100vw - 16px);
             max-height: 340px;
             overflow-y: auto;
+            overflow-x: hidden;
         }
         .dropdown-panel.open { display: block; }
 
@@ -202,6 +204,11 @@
             font-size: 14px;
             color: var(--text-primary);
             line-height: 1.3;
+            flex: 1;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
 
         /* Shows */
@@ -536,8 +543,15 @@
         }
         .scrape-venue-item:hover { background: var(--surface-item-hover); }
 
-        .scrape-venue-name {
+        .scrape-venue-info {
             flex: 1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .scrape-venue-name {
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
@@ -550,7 +564,6 @@
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
-            max-width: 140px;
         }
 
         .report-venue-btn {
