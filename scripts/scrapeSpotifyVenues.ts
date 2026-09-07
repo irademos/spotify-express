@@ -467,19 +467,57 @@ async function scrapeCity(
     });
 
     const entries = Array.from(uniqueArtistIds.entries());
-    console.log(`[scraper] ${city}: fetching top tracks for ${entries.length} artists...`);
-    for (let i = 0; i < entries.length; i += 5) {
-      const batch = entries.slice(i, i + 5);
+
+    // Load cached top_tracks from Supabase to avoid redundant Spotify API calls
+    const allArtistIds = entries.map(([, id]) => id);
+    const cachedTracksMap = new Map<string, string[]>(); // spotify_id → tracks
+    if (allArtistIds.length > 0) {
+      const { data: cachedRows } = await supabase
+        .from('artists')
+        .select('spotify_id, top_tracks')
+        .in('spotify_id', allArtistIds)
+        .not('top_tracks', 'is', null);
+      (cachedRows || []).forEach((row: { spotify_id: string; top_tracks: string[] }) => {
+        if (row.top_tracks?.length > 0) cachedTracksMap.set(row.spotify_id, row.top_tracks);
+      });
+      console.log(`[scraper] ${city}: ${cachedTracksMap.size} artists have cached top tracks`);
+    }
+
+    // Populate from cache first
+    entries.forEach(([name, id]) => {
+      const cached = cachedTracksMap.get(id);
+      if (cached) artistTopSongs[name] = cached;
+    });
+
+    const needsFetch = entries.filter(([, id]) => !cachedTracksMap.has(id));
+    console.log(`[scraper] ${city}: fetching top tracks for ${needsFetch.length} artists (${entries.length - needsFetch.length} from cache)...`);
+
+    const newlyCached: { spotify_id: string; top_tracks: string[] }[] = [];
+    for (let i = 0; i < needsFetch.length; i += 5) {
+      const batch = needsFetch.slice(i, i + 5);
       const results2 = await Promise.all(
         batch.map(async ([name, id]) => ({
           name,
+          id,
           songs: await fetchArtistTopTracks(id, searchToken),
         }))
       );
-      results2.forEach(({ name, songs }) => {
-        if (songs.length > 0) artistTopSongs[name] = songs;
+      results2.forEach(({ name, id, songs }) => {
+        if (songs.length > 0) {
+          artistTopSongs[name] = songs;
+          newlyCached.push({ spotify_id: id, top_tracks: songs });
+        }
       });
     }
+
+    if (newlyCached.length > 0) {
+      const { error: tracksErr } = await supabase
+        .from('artists')
+        .upsert(newlyCached, { onConflict: 'spotify_id' });
+      if (tracksErr) console.log('[scraper] Warning: could not cache top tracks:', tracksErr.message);
+      else console.log(`[scraper] ${city}: cached top tracks for ${newlyCached.length} new artists`);
+    }
+
     console.log(`[scraper] ${city}: top songs fetched for ${Object.keys(artistTopSongs).length} artists`);
   }
 
