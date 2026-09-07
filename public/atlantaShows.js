@@ -122,6 +122,7 @@ document.addEventListener('DOMContentLoaded', function () {
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             reportedVenueIds.add(venueId);
             renderScrapeVenues();
+            buildVenueCheckboxes();
         } catch (err) {
             alert('Failed to report venue: ' + err.message);
         }
@@ -632,8 +633,20 @@ document.addEventListener('DOMContentLoaded', function () {
             lbl.htmlFor = cbId;
             lbl.textContent = v.displayName;
 
+            const reportBtn = document.createElement('button');
+            reportBtn.className = 'report-venue-btn';
+            const alreadyReported = reportedVenueIds.has(v.id);
+            reportBtn.textContent = alreadyReported ? '✓' : '⚑';
+            reportBtn.title = alreadyReported ? 'Already reported' : 'Report venue';
+            reportBtn.disabled = alreadyReported;
+            reportBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                reportVenue(selectedCity, v.id, v.name);
+            });
+
             item.appendChild(cb);
             item.appendChild(lbl);
+            item.appendChild(reportBtn);
             container.appendChild(item);
         });
     }

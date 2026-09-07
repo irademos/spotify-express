@@ -526,6 +526,27 @@ async function scrapeCity(
     name: r.venueName !== r.venueId ? r.venueName : null,
   }));
 
+  // Update city_venues names with scraped venue names
+  const { data: cityRow } = await supabase
+    .from('city_venues')
+    .select('venues')
+    .eq('city', city)
+    .single();
+
+  if (cityRow) {
+    const venueNameById = new Map(venues.filter(v => v.name).map(v => [v.id, v.name!]));
+    const updatedVenues = ((cityRow as any).venues as any[]).map((v: any) => {
+      const scrapedName = venueNameById.get(v.id);
+      return scrapedName ? { ...v, name: scrapedName } : v;
+    });
+    const { error: nameErr } = await supabase
+      .from('city_venues')
+      .update({ venues: updatedVenues, updated_at: new Date().toISOString() })
+      .eq('city', city);
+    if (nameErr) console.log(`[scraper] Warning: could not update venue names for ${city}:`, nameErr.message);
+    else console.log(`[scraper] ${city}: updated venue names in city_venues`);
+  }
+
   const payload = { shows: allShows, venues, artistTopSongs, scrapedAt: new Date().toISOString() };
 
   // Write to generic shows_cache keyed by city
