@@ -875,6 +875,54 @@ app.get('/api/chartmetric-search', async (req, res) => {
     }
 });
 
+app.get('/api/venue-search', async (req: any, res: any) => {
+    const name = (req.query.name as string || '').trim();
+    const city = (req.query.city as string || '').trim();
+    if (!name) return res.status(400).json({ error: 'Missing venue name' });
+
+    const query = city
+        ? `site:open.spotify.com/venue "${name}" ${city}`
+        : `site:open.spotify.com/venue "${name}"`;
+
+    const apiKey = process.env.GOOGLE_KEY;
+    const cx = process.env.GOOGLE_SEARCH_KEY;
+
+    if (!apiKey || !cx) {
+        return res.status(500).json({ error: 'Search not configured (missing GOOGLE_KEY / GOOGLE_SEARCH_KEY)' });
+    }
+
+    try {
+        const response = await axios.get('https://www.googleapis.com/customsearch/v1', {
+            params: { key: apiKey, cx, q: query, num: 10 },
+            timeout: 12000,
+        });
+
+        const items: any[] = response.data.items || [];
+        const results: Array<{title: string; url: string; venueId: string; snippet: string}> = [];
+        const seen = new Set<string>();
+
+        for (const item of items) {
+            const url: string = item.link || '';
+            const venueMatch = url.match(/open\.spotify\.com\/venue\/([A-Za-z0-9]+)/);
+            if (!venueMatch) continue;
+            const venueId = venueMatch[1];
+            if (seen.has(venueId)) continue;
+            seen.add(venueId);
+            results.push({
+                title: item.title || venueId,
+                url: `https://open.spotify.com/venue/${venueId}`,
+                venueId,
+                snippet: item.snippet || '',
+            });
+        }
+
+        res.json({ results, query });
+    } catch (err: any) {
+        console.error('Venue search error:', err.response?.data || err.message);
+        res.status(500).json({ error: 'Search failed', details: err.message });
+    }
+});
+
 app.get('/api/scrape', function (req, res) {
   console.log("here for scrape.")
   const url = req.query.url;

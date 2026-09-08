@@ -572,6 +572,71 @@
         }
         .inline-cancel-btn:hover { background: var(--surface-hover); }
 
+        /* Venue search card */
+        #addVenueInline input {
+            font-size: 13px;
+            padding: 5px 9px;
+            border: 1px solid var(--input-border);
+            border-radius: 4px;
+            outline: none;
+            background: var(--input-bg);
+            color: var(--text-primary);
+        }
+        #addVenueInline input:focus { border-color: #1db954; }
+        .add-venue-wrapper { position: relative; }
+        #addVenueInline {
+            display: none;
+            flex-direction: column;
+            gap: 10px;
+            position: absolute;
+            top: calc(100% + 6px);
+            left: 0;
+            z-index: 200;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 14px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.30);
+            min-width: 360px;
+            max-width: 480px;
+        }
+        #addVenueInline.visible { display: flex; }
+        .venue-add-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+        .venue-add-or {
+            display: flex; align-items: center; gap: 8px;
+            color: var(--text-muted); font-size: 11px; font-weight: 700; letter-spacing: 0.07em;
+        }
+        .venue-add-or-line { flex: 1; height: 1px; background: var(--border); }
+        .venue-search-results {
+            margin-top: 4px; max-height: 220px; overflow-y: auto;
+            border: 1px solid var(--border); border-radius: 6px;
+        }
+        .venue-search-result-item {
+            display: flex; align-items: center; gap: 8px;
+            padding: 8px 10px; cursor: pointer;
+            border-bottom: 1px solid var(--border);
+            font-size: 13px; color: var(--text-primary);
+        }
+        .venue-search-result-item:last-child { border-bottom: none; }
+        .venue-search-result-item:hover { background: var(--surface-hover); }
+        .venue-search-result-title { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .venue-search-icon-btn {
+            flex-shrink: 0; width: 26px; height: 26px;
+            display: flex; align-items: center; justify-content: center;
+            border: 1px solid var(--border); border-radius: 4px;
+            background: none; cursor: pointer; color: var(--text-secondary);
+            font-size: 13px; text-decoration: none; line-height: 1;
+        }
+        .venue-search-icon-btn:hover { background: var(--surface-hover); color: var(--text-primary); }
+        .venue-search-status { font-size: 12px; color: var(--text-muted); padding: 4px 2px; }
+        .venue-search-snippet-tooltip {
+            display: none; position: absolute; z-index: 300;
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: 6px; padding: 8px 10px; font-size: 12px;
+            color: var(--text-secondary); max-width: 300px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.25); pointer-events: none;
+        }
+
         /* Scrape venue list panel */
         .scrape-venue-item {
             display: flex;
@@ -830,11 +895,32 @@
                         <div class="scrape-venue-count" id="scrapeVenueCount"></div>
                     </div>
                 </div>
-                <button class="add-btn" id="addVenueBtn" title="Add venue to this city">+</button>
-                <div class="inline-add" id="addVenueInline">
-                    <input type="text" id="addVenueInput" placeholder="Venue ID or Spotify URL">
-                    <button class="inline-confirm-btn" id="addVenueConfirm">Add</button>
-                    <button class="inline-cancel-btn" id="addVenueCancel">Cancel</button>
+                <div class="add-venue-wrapper">
+                    <button class="add-btn" id="addVenueBtn" title="Add venue to this city">+</button>
+                    <div id="addVenueInline">
+                        <!-- Direct ID entry -->
+                        <div class="venue-add-row">
+                            <input type="text" id="addVenueInput" placeholder="Venue ID or Spotify URL" style="min-width:200px;">
+                            <button class="inline-confirm-btn" id="addVenueConfirm">Add</button>
+                            <button class="inline-cancel-btn" id="addVenueCancel">Cancel</button>
+                        </div>
+                        <!-- OR divider -->
+                        <div class="venue-add-or">
+                            <span class="venue-add-or-line"></span>
+                            <span>OR</span>
+                            <span class="venue-add-or-line"></span>
+                        </div>
+                        <!-- Search by name -->
+                        <div>
+                            <div class="venue-add-row">
+                                <input type="text" id="venueSearchName" placeholder="Venue name (e.g. Terminal West)" style="flex:1;min-width:140px;">
+                                <input type="text" id="venueSearchCity" placeholder="City" style="width:100px;">
+                                <button class="inline-confirm-btn" id="venueSearchBtn">Search</button>
+                            </div>
+                            <div id="venueSearchStatus" class="venue-search-status"></div>
+                            <div id="venueSearchResults" class="venue-search-results" style="display:none;"></div>
+                        </div>
+                    </div>
                 </div>
                 <button id="settingsToggleBtn" title="Settings" style="margin-left:8px;background:none;border:1px solid var(--border);color:var(--text-secondary);font-size:15px;padding:4px 8px;border-radius:4px;cursor:pointer;line-height:1;">&#9881;</button>
             </div>

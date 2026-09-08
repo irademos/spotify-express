@@ -237,22 +237,40 @@ document.addEventListener('DOMContentLoaded', function () {
     const addVenueInput = document.getElementById('addVenueInput');
     const addVenueConfirm = document.getElementById('addVenueConfirm');
     const addVenueCancel = document.getElementById('addVenueCancel');
+    const venueSearchName = document.getElementById('venueSearchName');
+    const venueSearchCity = document.getElementById('venueSearchCity');
+    const venueSearchBtn = document.getElementById('venueSearchBtn');
+    const venueSearchStatus = document.getElementById('venueSearchStatus');
+    const venueSearchResults = document.getElementById('venueSearchResults');
 
-    addVenueBtn.addEventListener('click', () => {
-        addVenueInline.classList.toggle('visible');
-        if (addVenueInline.classList.contains('visible')) addVenueInput.focus();
-    });
-
-    addVenueCancel.addEventListener('click', () => {
+    function closeVenueInline() {
         addVenueInline.classList.remove('visible');
         addVenueInput.value = '';
+        venueSearchName.value = '';
+        venueSearchStatus.textContent = '';
+        venueSearchResults.style.display = 'none';
+        venueSearchResults.innerHTML = '';
+    }
+
+    addVenueBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const willOpen = !addVenueInline.classList.contains('visible');
+        addVenueInline.classList.toggle('visible');
+        if (willOpen) {
+            venueSearchCity.value = selectedCity;
+            addVenueInput.focus();
+        }
     });
+
+    addVenueInline.addEventListener('click', (e) => e.stopPropagation());
+
+    addVenueCancel.addEventListener('click', closeVenueInline);
 
     async function submitAddVenue() {
         const raw = addVenueInput.value.trim();
         const venueId = extractVenueId(raw);
         if (!venueId) {
-            alert('Enter a valid Spotify venue ID or URL (e.g. https://open.spotify.com/venue/...). ');
+            alert('Enter a valid Spotify venue ID or URL (e.g. https://open.spotify.com/venue/...).');
             return;
         }
         try {
@@ -267,8 +285,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 const entry = cityVenueData.find(e => e.city === selectedCity);
                 if (entry) entry.venues.push({ id: venueId, name: null });
             }
-            addVenueInput.value = '';
-            addVenueInline.classList.remove('visible');
+            closeVenueInline();
             renderScrapeVenues();
         } catch (err) {
             alert('Failed to add venue: ' + err.message);
@@ -277,6 +294,75 @@ document.addEventListener('DOMContentLoaded', function () {
 
     addVenueConfirm.addEventListener('click', submitAddVenue);
     addVenueInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') submitAddVenue(); });
+
+    async function doVenueSearch() {
+        const name = venueSearchName.value.trim();
+        if (!name) { venueSearchStatus.textContent = 'Enter a venue name to search.'; return; }
+        const city = venueSearchCity.value.trim();
+        venueSearchStatus.textContent = 'Searching…';
+        venueSearchResults.style.display = 'none';
+        venueSearchResults.innerHTML = '';
+        venueSearchBtn.disabled = true;
+        try {
+            const params = new URLSearchParams({ name });
+            if (city) params.set('city', city);
+            const res = await fetch(`/api/venue-search?${params}`);
+            const json = await res.json();
+            venueSearchBtn.disabled = false;
+            if (!res.ok) { venueSearchStatus.textContent = 'Search failed: ' + (json.error || res.status); return; }
+            const results = json.results || [];
+            if (results.length === 0) {
+                venueSearchStatus.textContent = 'No Spotify venue pages found.';
+                return;
+            }
+            venueSearchStatus.textContent = `${results.length} result${results.length !== 1 ? 's' : ''} found — click one to use it.`;
+            venueSearchResults.style.display = 'block';
+            results.forEach(r => {
+                const item = document.createElement('div');
+                item.className = 'venue-search-result-item';
+
+                const title = document.createElement('span');
+                title.className = 'venue-search-result-title';
+                title.textContent = r.title || r.venueId;
+                title.title = r.snippet || r.url;
+
+                const linkBtn = document.createElement('a');
+                linkBtn.className = 'venue-search-icon-btn';
+                linkBtn.href = r.url;
+                linkBtn.target = '_blank';
+                linkBtn.rel = 'noopener noreferrer';
+                linkBtn.title = 'Open on Spotify';
+                linkBtn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/></svg>';
+                linkBtn.addEventListener('click', (e) => e.stopPropagation());
+
+                const infoBtn = document.createElement('button');
+                infoBtn.className = 'venue-search-icon-btn';
+                infoBtn.title = r.snippet || 'No description available';
+                infoBtn.textContent = 'ⓘ';
+                infoBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    alert((r.title || r.venueId) + '\n\n' + (r.snippet || 'No description available') + '\n\nID: ' + r.venueId);
+                });
+
+                item.appendChild(title);
+                item.appendChild(linkBtn);
+                item.appendChild(infoBtn);
+
+                item.addEventListener('click', () => {
+                    addVenueInput.value = r.venueId;
+                    submitAddVenue();
+                });
+
+                venueSearchResults.appendChild(item);
+            });
+        } catch (err) {
+            venueSearchBtn.disabled = false;
+            venueSearchStatus.textContent = 'Search error: ' + err.message;
+        }
+    }
+
+    venueSearchBtn.addEventListener('click', doVenueSearch);
+    venueSearchName.addEventListener('keydown', (e) => { if (e.key === 'Enter') doVenueSearch(); });
 
     loadCityVenues();
 
@@ -700,6 +786,7 @@ document.addEventListener('DOMContentLoaded', function () {
         trigger.classList.remove('open');
         scrapePanel.classList.remove('open');
         scrapeTrigger.classList.remove('open');
+        closeVenueInline();
     });
 
     panel.addEventListener('click', (e) => e.stopPropagation());
