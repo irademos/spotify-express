@@ -522,60 +522,6 @@
         .player-ext-link.sp  { border-color: #1db954; color: #1db954; }
         .player-ext-link.goog { border-color: #aaa; color: #ddd; }
 
-        /* Spotify floating player */
-        #sp-player-card {
-            position: fixed; bottom: 16px; right: 372px;
-            width: 340px;
-            background: var(--player-bg);
-            border: 1px solid var(--border);
-            border-radius: 10px;
-            box-shadow: 0 6px 24px var(--shadow);
-            z-index: 499; display: none; overflow: hidden;
-        }
-        #sp-player-card.visible { display: block; }
-
-        .sp-player-header {
-            display: flex; align-items: center; gap: 8px;
-            padding: 10px 12px 8px;
-            border-bottom: 1px solid var(--border-light);
-        }
-
-        .sp-artist-name {
-            font-size: 13px; font-weight: 700;
-            color: var(--text-primary);
-            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-        }
-        .sp-song-name {
-            font-size: 11px; color: var(--text-muted);
-            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-        }
-
-        .sp-header-btns { display: flex; align-items: center; gap: 4px; }
-
-        .sp-ctrl-btn {
-            background: none; border: none; color: var(--text-secondary);
-            cursor: pointer; font-size: 16px; padding: 4px 6px;
-            border-radius: 4px; line-height: 1;
-            transition: background 0.15s, color 0.15s;
-        }
-        .sp-ctrl-btn:hover { background: var(--surface-hover); color: var(--text-primary); }
-        .sp-ctrl-btn.accent { color: #1db954; font-size: 18px; }
-        .sp-ctrl-btn.accent:hover { background: rgba(29,185,84,0.1); }
-
-        .sp-img-wrap { overflow: hidden; transition: height 0.25s; }
-        .sp-img-wrap.expanded { height: 192px; }
-        .sp-img-wrap.collapsed { height: 0; }
-        #sp-img-container {
-            width: 340px; height: 191px; position: relative;
-            background: #000; overflow: hidden;
-        }
-        #sp-artist-img {
-            width: 100%; height: 100%; object-fit: cover; display: block;
-        }
-        #sp-img-container .player-links-bar {
-            position: absolute; bottom: 0; left: 0; right: 0;
-        }
-
         /* YT links bar inside video area */
         #yt-video-wrap .player-links-bar {
             position: absolute; bottom: 0; left: 0; right: 0;
@@ -590,16 +536,6 @@
             transition: background 0.15s, color 0.15s;
         }
         .loc-btn:hover { color: #1db954; background: rgba(29,185,84,0.1); }
-
-        /* Spotify play button on artist chip */
-        .sp-play-btn {
-            background: none; border: 1px solid #1db954; color: #1db954;
-            border-radius: 50%; width: 22px; height: 22px; min-width: 22px;
-            padding: 0; font-size: 9px; cursor: pointer;
-            display: flex; align-items: center; justify-content: center;
-            transition: background 0.15s, color 0.15s; flex-shrink: 0;
-        }
-        .sp-play-btn:hover, .sp-play-btn.active { background: #1db954; color: #fff; }
 
         @media (max-width: 600px) {
             body { padding: 12px 8px 160px; }
@@ -652,7 +588,7 @@
             .play-btn { width: 24px; height: 24px; min-width: 24px; font-size: 10px; }
 
             /* Floating player — full width, flush to bottom */
-            #yt-player-card, #sp-player-card {
+            #yt-player-card {
                 left: 0;
                 right: 0;
                 width: auto;
@@ -664,14 +600,6 @@
             #yt-iframe-container { width: 100% !important; height: auto !important; aspect-ratio: 16/9; }
             .yt-video-wrap.expanded { height: auto; }
 
-            /* Spotify player: full-width at bottom, above YT if both visible */
-            #sp-player-card {
-                left: 0; right: 0; bottom: 0;
-                width: auto; border-radius: 10px 10px 0 0;
-            }
-            #sp-img-container { width: 100%; height: auto; aspect-ratio: 16/9; }
-            .sp-img-wrap.expanded { height: auto; }
-            #yt-player-card { bottom: 0; }
         }
     </style>
 </head>
@@ -785,34 +713,6 @@
                 <a class="player-ext-link yt" id="ytExtYt" href="#" target="_blank" rel="noopener">▶ YouTube</a>
                 <a class="player-ext-link goog" id="ytExtGoogle" href="#" target="_blank" rel="noopener">🔍 Google</a>
                 <a class="player-ext-link sp" id="ytExtSpotify" href="#" target="_blank" rel="noopener">♫ Spotify</a>
-            </div>
-        </div>
-    </div>
-
-    <!-- Floating Spotify player -->
-    <div id="sp-player-card">
-        <div class="sp-player-header">
-            <div class="sp-now-playing-info" id="spNowPlayingInfo" title="Tap to expand/collapse">
-                <div class="sp-artist-name" id="spArtistName">—</div>
-                <div class="sp-song-name" id="spSongName">—</div>
-            </div>
-            <div class="sp-header-btns">
-                <button class="loc-btn" id="spLocBtn" title="Scroll to event">📍</button>
-                <button class="sp-ctrl-btn" id="spPrevBtn" title="Previous artist">⏮</button>
-                <button class="sp-ctrl-btn accent" id="spPlayPauseBtn" title="Play/Pause">⏸</button>
-                <button class="sp-ctrl-btn" id="spNextBtn" title="Next artist">⏭</button>
-                <button class="sp-ctrl-btn" id="spToggleImg" title="Show/hide image">▼</button>
-                <button class="sp-ctrl-btn" id="spCloseBtn" title="Close">✕</button>
-            </div>
-        </div>
-        <div class="sp-img-wrap expanded" id="spImgWrap">
-            <div id="sp-img-container">
-                <img id="sp-artist-img" src="" alt="">
-                <div class="player-links-bar" id="spLinksBar">
-                    <a class="player-ext-link yt" id="spExtYt" href="#" target="_blank" rel="noopener">▶ YouTube</a>
-                    <a class="player-ext-link goog" id="spExtGoogle" href="#" target="_blank" rel="noopener">🔍 Google</a>
-                    <a class="player-ext-link sp" id="spExtSpotify" href="#" target="_blank" rel="noopener">♫ Spotify</a>
-                </div>
             </div>
         </div>
     </div>
@@ -1575,177 +1475,6 @@
             if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
         });
 
-        // ── Spotify player ────────────────────────────────────────────────────
-        let spPlayer          = null;
-        let spDeviceId        = null;
-        let spIsPlaying       = false;
-        let spLastPos         = 0;
-        let spActiveShowIdx   = null;
-        let spActiveArtistName = null;
-        let spActiveArtistIdx = null;
-        let spImgShown        = true;
-
-        function normalizeArtistName(name) {
-            return name.toLowerCase().normalize('NFD')
-                .replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');
-        }
-
-        window.onSpotifyWebPlaybackSDKReady = function () {
-            const token = document.cookie.match(/spotifyAccessToken=([^;]+)/)?.[1];
-            if (!token) return;
-            spPlayer = new Spotify.Player({
-                name: 'Explore Shows Player',
-                getOAuthToken: cb => { cb(token); },
-                volume: 0.5
-            });
-            spPlayer.addListener('ready', ({ device_id }) => { spDeviceId = device_id; });
-            spPlayer.addListener('player_state_changed', (state) => {
-                if (!state) return;
-                if (spIsPlaying && state.paused && state.position === 0 && spLastPos > 5000) {
-                    spIsPlaying = false;
-                    updateSpButtons();
-                    spPlayNext();
-                    return;
-                }
-                if (!state.paused) spLastPos = state.position;
-                spIsPlaying = !state.paused;
-                const btn = document.getElementById('spPlayPauseBtn');
-                if (btn) btn.textContent = spIsPlaying ? '⏸' : '▶';
-                updateSpButtons();
-            });
-            spPlayer.connect();
-        };
-
-        function updateSpButtons() {
-            document.querySelectorAll('.sp-play-btn').forEach(b => {
-                const active = parseInt(b.dataset.idx) === spActiveShowIdx
-                    && b.dataset.artist === spActiveArtistName && spIsPlaying;
-                b.classList.toggle('active', active);
-                b.textContent = active ? '⏸' : '♫';
-            });
-        }
-
-        async function spPlayArtist(showIdx, artistName, artistIdx) {
-            if (!spDeviceId) { showToast('Spotify player not ready'); return; }
-            spLastPos = 0;
-            try {
-                const show = allShows[showIdx];
-                let artistId = show?.spotifyArtistIds?.[artistIdx] || null;
-                if (!artistId) {
-                    const sr = await fetchWithSpotifyAuth(
-                        `https://api.spotify.com/v1/search?q=${encodeURIComponent('"'+artistName+'"')}&type=artist&limit=10`
-                    );
-                    const sd = await sr.json();
-                    const items = sd.artists?.items || [];
-                    const norm = normalizeArtistName(artistName);
-                    const exact = items.find(a => normalizeArtistName(a.name) === norm);
-                    artistId = exact?.id || [...items].sort((a,b) => b.popularity - a.popularity)[0]?.id || null;
-                    if (artistId && show) {
-                        if (!show.spotifyArtistIds) show.spotifyArtistIds = [];
-                        show.spotifyArtistIds[artistIdx] = artistId;
-                    }
-                }
-                if (!artistId) return;
-                const tr = await fetchWithSpotifyAuth(`https://api.spotify.com/v1/artists/${artistId}/top-tracks?market=US`);
-                const td = await tr.json();
-                const trackUri = td.tracks?.[0]?.uri;
-                if (!trackUri) return;
-                const trackName = td.tracks?.[0]?.name || '';
-                await fetchWithSpotifyAuth(
-                    `https://api.spotify.com/v1/me/player/play?device_id=${spDeviceId}`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ uris: [trackUri] })
-                });
-                spActiveShowIdx    = showIdx;
-                spActiveArtistName = artistName;
-                spActiveArtistIdx  = artistIdx;
-                spIsPlaying = true;
-                updateSpButtons();
-                document.getElementById('sp-player-card').classList.add('visible');
-                document.getElementById('spArtistName').textContent = artistName;
-                document.getElementById('spSongName').textContent   = trackName;
-                const show2 = allShows[showIdx];
-                const imgUrl = show2?.firstArtistAvatarUrl || '';
-                const spImg = document.getElementById('sp-artist-img');
-                spImg.src = imgUrl;
-                spImg.style.display = imgUrl ? 'block' : 'none';
-                // External links
-                document.getElementById('spExtYt').href     = `https://www.youtube.com/results?search_query=${encodeURIComponent(artistName)}`;
-                document.getElementById('spExtGoogle').href = `https://www.google.com/search?q=${encodeURIComponent(artistName + ' music')}`;
-                document.getElementById('spExtSpotify').href = artistId
-                    ? `https://open.spotify.com/artist/${artistId}`
-                    : `https://open.spotify.com/search/${encodeURIComponent(artistName)}`;
-                document.getElementById('spPlayPauseBtn').textContent = '⏸';
-            } catch (err) { console.error('Spotify play error:', err); }
-        }
-
-        function spPlayNext() {
-            const visible = allShows.filter(s => selectedVenueIds.has(s.venueId) && isUpcoming(s));
-            const visIdx  = visible.findIndex(s => allShows.indexOf(s) === spActiveShowIdx);
-            if (visIdx === -1) return;
-            const show  = visible[visIdx];
-            const nextA = (spActiveArtistIdx ?? 0) + 1;
-            if (nextA < show.artists.length) {
-                spPlayArtist(spActiveShowIdx, show.artists[nextA], nextA);
-                return;
-            }
-            const nextVis = visIdx + 1;
-            if (nextVis < visible.length) {
-                const ns = visible[nextVis];
-                spPlayArtist(allShows.indexOf(ns), ns.artists[0], 0);
-            }
-        }
-
-        function spPlayPrev() {
-            const visible = allShows.filter(s => selectedVenueIds.has(s.venueId) && isUpcoming(s));
-            const visIdx  = visible.findIndex(s => allShows.indexOf(s) === spActiveShowIdx);
-            if (visIdx === -1) return;
-            const show  = visible[visIdx];
-            const prevA = (spActiveArtistIdx ?? 0) - 1;
-            if (prevA >= 0) {
-                spPlayArtist(spActiveShowIdx, show.artists[prevA], prevA);
-                return;
-            }
-            const prevVis = visIdx - 1;
-            if (prevVis >= 0) {
-                const ps = visible[prevVis];
-                const lastA = ps.artists.length - 1;
-                spPlayArtist(allShows.indexOf(ps), ps.artists[lastA], lastA);
-            }
-        }
-
-        document.getElementById('spPlayPauseBtn').addEventListener('click', () => {
-            if (!spPlayer) return;
-            spIsPlaying ? spPlayer.pause() : spPlayer.resume();
-        });
-        document.getElementById('spPrevBtn').addEventListener('click', () => spPlayPrev());
-        document.getElementById('spNextBtn').addEventListener('click', () => spPlayNext());
-        document.getElementById('spCloseBtn').addEventListener('click', () => {
-            if (spPlayer) try { spPlayer.pause(); } catch(e) {}
-            spIsPlaying = false;
-            updateSpButtons();
-            document.getElementById('sp-player-card').classList.remove('visible');
-            spActiveShowIdx = null; spActiveArtistName = null;
-        });
-
-        function toggleSpImg() {
-            const wrap = document.getElementById('spImgWrap');
-            const btn  = document.getElementById('spToggleImg');
-            spImgShown = !spImgShown;
-            wrap.classList.toggle('expanded', spImgShown);
-            wrap.classList.toggle('collapsed', !spImgShown);
-            btn.textContent = spImgShown ? '▼' : '▲';
-        }
-        document.getElementById('spToggleImg').addEventListener('click', toggleSpImg);
-        document.getElementById('spNowPlayingInfo').addEventListener('click', toggleSpImg);
-
-        document.getElementById('spLocBtn').addEventListener('click', () => {
-            if (spActiveShowIdx === null) return;
-            const el = document.querySelector(`.show-item[data-idx="${spActiveShowIdx}"]`);
-            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        });
-
         // ── Shows rendering ───────────────────────────────────────────────────
         function renderShows() {
             const container = document.getElementById('showsContainer');
@@ -1843,25 +1572,6 @@
                     nameLink.addEventListener('mouseover', () => nameLink.style.textDecoration = 'underline');
                     nameLink.addEventListener('mouseout',  () => nameLink.style.textDecoration = 'none');
                     chip.appendChild(nameLink);
-
-                    // Spotify play button
-                    const spBtn = document.createElement('button');
-                    spBtn.className = 'sp-play-btn';
-                    spBtn.dataset.idx    = globalIdx;
-                    spBtn.dataset.artist = name;
-                    spBtn.title = `Play on Spotify: ${name}`;
-                    spBtn.textContent = '♫';
-                    if (spActiveShowIdx === globalIdx && spActiveArtistName === name && spIsPlaying)
-                        spBtn.classList.add('active');
-                    spBtn.addEventListener('click', (e) => {
-                        e.stopPropagation();
-                        if (spActiveShowIdx === globalIdx && spActiveArtistName === name) {
-                            spIsPlaying ? spPlayer?.pause() : spPlayer?.resume();
-                        } else {
-                            spPlayArtist(globalIdx, name, aIdx);
-                        }
-                    });
-                    chip.appendChild(spBtn);
 
                     if (aIdx < show.artists.length - 1) {
                         const sep = document.createElement('span');
@@ -1970,7 +1680,6 @@
     </script>
 
     <script src="https://www.youtube.com/iframe_api"></script>
-    <script src="/utils.js"></script>
-    <script src="https://sdk.scdn.co/spotify-player.js"></script>
+
 </body>
 </html>
