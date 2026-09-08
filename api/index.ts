@@ -884,44 +884,41 @@ app.get('/api/venue-search', async (req: any, res: any) => {
         ? `site:open.spotify.com/venue "${name}" ${city}`
         : `site:open.spotify.com/venue "${name}"`;
 
+    const apiKey = process.env.GOOGLE_KEY;
+    const cx = process.env.GOOGLE_SEARCH_KEY;
+
+    if (!apiKey || !cx) {
+        return res.status(500).json({ error: 'Search not configured (missing GOOGLE_KEY / GOOGLE_SEARCH_KEY)' });
+    }
+
     try {
-        const response = await axios.get('https://html.duckduckgo.com/html/', {
-            params: { q: query },
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept-Language': 'en-US,en;q=0.9',
-                'Accept': 'text/html,application/xhtml+xml',
-            },
+        const response = await axios.get('https://www.googleapis.com/customsearch/v1', {
+            params: { key: apiKey, cx, q: query, num: 10 },
             timeout: 12000,
         });
 
-        const $ = cheerio.load(response.data as string);
+        const items: any[] = response.data.items || [];
         const results: Array<{title: string; url: string; venueId: string; snippet: string}> = [];
         const seen = new Set<string>();
 
-        $('.result__a').each((_, el) => {
-            const href = $(el).attr('href') || '';
-            const title = $(el).text().trim();
-            // DuckDuckGo wraps the real URL in a redirect; parse it out
-            const uddg = href.match(/uddg=([^&]+)/);
-            const actualUrl = uddg ? decodeURIComponent(uddg[1]) : href;
-            const venueMatch = actualUrl.match(/open\.spotify\.com\/venue\/([A-Za-z0-9]+)/);
-            if (!venueMatch) return;
+        for (const item of items) {
+            const url: string = item.link || '';
+            const venueMatch = url.match(/open\.spotify\.com\/venue\/([A-Za-z0-9]+)/);
+            if (!venueMatch) continue;
             const venueId = venueMatch[1];
-            if (seen.has(venueId)) return;
+            if (seen.has(venueId)) continue;
             seen.add(venueId);
-            const snippet = $(el).closest('.result').find('.result__snippet').text().trim();
             results.push({
-                title,
+                title: item.title || venueId,
                 url: `https://open.spotify.com/venue/${venueId}`,
                 venueId,
-                snippet,
+                snippet: item.snippet || '',
             });
-        });
+        }
 
         res.json({ results, query });
     } catch (err: any) {
-        console.error('Venue search error:', err.message);
+        console.error('Venue search error:', err.response?.data || err.message);
         res.status(500).json({ error: 'Search failed', details: err.message });
     }
 });
