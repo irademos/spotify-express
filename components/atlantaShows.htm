@@ -434,6 +434,40 @@
         }
         .img-popup-close:hover { background: var(--surface-hover); }
 
+        .img-popup-nav {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 40px;
+            height: 40px;
+            background: rgba(0,0,0,0.55);
+            color: #fff;
+            border: none;
+            border-radius: 50%;
+            font-size: 28px;
+            line-height: 1;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+            z-index: 10;
+            transition: background 0.15s;
+        }
+        .img-popup-nav:hover { background: rgba(0,0,0,0.8); }
+        .img-popup-nav[hidden] { display: none !important; }
+        .img-popup-prev { left: -50px; }
+        .img-popup-next { right: -50px; }
+        .img-popup-label {
+            position: absolute;
+            bottom: -28px;
+            left: 0; right: 0;
+            text-align: center;
+            color: #fff;
+            font-size: 13px;
+            text-shadow: 0 1px 4px rgba(0,0,0,0.8);
+        }
+
         /* City / venue config section */
         .config-section {
             border: 1px solid var(--border);
@@ -827,7 +861,10 @@
     <div class="img-popup-overlay" id="imgPopupOverlay">
         <div class="img-popup-inner">
             <button class="img-popup-close" id="imgPopupClose" title="Close">&times;</button>
+            <button class="img-popup-nav img-popup-prev" id="imgPopupPrev" title="Previous band">&lsaquo;</button>
             <img id="imgPopupImg" src="" alt="">
+            <div class="img-popup-label" id="imgPopupLabel"></div>
+            <button class="img-popup-nav img-popup-next" id="imgPopupNext" title="Next band">&rsaquo;</button>
         </div>
     </div>
 

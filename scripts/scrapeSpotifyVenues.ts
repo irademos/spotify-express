@@ -65,6 +65,7 @@ interface Show {
   spotifyArtistIds?: (string | null)[];
   concertUri?: string;
   firstArtistAvatarUrl?: string;
+  artistAvatarUrls?: (string | null)[];
 }
 
 interface VenueResult {
@@ -112,8 +113,10 @@ function parseVenueApiResponse(venueData: any, venueId: string): VenueResult {
     }
 
     const concertUri: string | null = d.uri || null; // "spotify:concert:<id>"
-    const firstArtistAvatarUrl: string | null =
-      artistItems[0]?.data?.visuals?.avatarImage?.sources?.[0]?.url ?? null;
+    const artistAvatarUrls: (string | null)[] = artistItems.map(
+      (item: any) => item?.data?.visuals?.avatarImage?.sources?.[0]?.url ?? null
+    );
+    const firstArtistAvatarUrl: string | null = artistAvatarUrls[0] ?? null;
 
     const venue = d.location?.name || venueName;
     if (datetime && artists.length > 0) {
@@ -121,6 +124,7 @@ function parseVenueApiResponse(venueData: any, venueId: string): VenueResult {
       if (spotifyArtistIds.some(id => id !== null)) show.spotifyArtistIds = spotifyArtistIds;
       if (concertUri) show.concertUri = concertUri;
       if (firstArtistAvatarUrl) show.firstArtistAvatarUrl = firstArtistAvatarUrl;
+      if (artistAvatarUrls.some(u => u !== null)) show.artistAvatarUrls = artistAvatarUrls;
       shows.push(show);
     }
   });

@@ -585,7 +585,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
             // Update floating player UI
             const trackName = tracksData.tracks?.[0]?.name || '';
-            const imgUrl = show.firstArtistAvatarUrl || '';
+            const imgUrl = (show.artistAvatarUrls && show.artistAvatarUrls[artistIdx]) || show.firstArtistAvatarUrl || '';
             updateFloatingPlayer(artistName, trackName, artistId, imgUrl);
         } catch (err) {
             console.error('Error playing artist:', artistName, err);
@@ -595,10 +595,37 @@ document.addEventListener('DOMContentLoaded', function () {
     // Image popup
     const imgPopupOverlay = document.getElementById('imgPopupOverlay');
     const imgPopupImg = document.getElementById('imgPopupImg');
+    const imgPopupLabel = document.getElementById('imgPopupLabel');
+    const imgPopupPrev = document.getElementById('imgPopupPrev');
+    const imgPopupNext = document.getElementById('imgPopupNext');
 
-    function openImgPopup(src, alt) {
-        imgPopupImg.src = src;
-        imgPopupImg.alt = alt;
+    let popupImages = []; // [{src, alt}]
+    let popupIndex = 0;
+
+    function renderPopupImage() {
+        const entry = popupImages[popupIndex];
+        imgPopupImg.src = entry.src;
+        imgPopupImg.alt = entry.alt;
+        if (popupImages.length > 1) {
+            imgPopupLabel.textContent = entry.alt + (popupImages.length > 1 ? ` (${popupIndex + 1}/${popupImages.length})` : '');
+        } else {
+            imgPopupLabel.textContent = '';
+        }
+        if (imgPopupPrev) imgPopupPrev.hidden = popupIndex === 0;
+        if (imgPopupNext) imgPopupNext.hidden = popupIndex === popupImages.length - 1;
+    }
+
+    function openImgPopup(images, startIndex = 0) {
+        // Accept either [{src,alt}] array or a single (src, alt) call for backwards compat
+        if (typeof images === 'string') {
+            popupImages = [{ src: images, alt: startIndex || '' }];
+            popupIndex = 0;
+        } else {
+            popupImages = images.filter(i => i.src);
+            popupIndex = Math.min(startIndex, popupImages.length - 1);
+        }
+        if (popupImages.length === 0) return;
+        renderPopupImage();
         imgPopupOverlay.classList.add('active');
     }
 
@@ -607,12 +634,23 @@ document.addEventListener('DOMContentLoaded', function () {
         imgPopupImg.src = '';
     }
 
+    if (imgPopupPrev) imgPopupPrev.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (popupIndex > 0) { popupIndex--; renderPopupImage(); }
+    });
+    if (imgPopupNext) imgPopupNext.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (popupIndex < popupImages.length - 1) { popupIndex++; renderPopupImage(); }
+    });
+
     document.getElementById('imgPopupClose').addEventListener('click', closeImgPopup);
     imgPopupOverlay.addEventListener('click', (e) => {
         if (e.target === imgPopupOverlay) closeImgPopup();
     });
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') closeImgPopup();
+        if (e.key === 'ArrowLeft' && imgPopupOverlay.classList.contains('active') && popupIndex > 0) { popupIndex--; renderPopupImage(); }
+        if (e.key === 'ArrowRight' && imgPopupOverlay.classList.contains('active') && popupIndex < popupImages.length - 1) { popupIndex++; renderPopupImage(); }
     });
 
     document.getElementById('backBtn').addEventListener('click', () => {
@@ -799,13 +837,19 @@ document.addEventListener('DOMContentLoaded', function () {
             const dateDiv = document.createElement('div');
             dateDiv.className = 'show-date-cell';
 
-            if (show.firstArtistAvatarUrl) {
+            const firstImg = show.firstArtistAvatarUrl || (show.artistAvatarUrls && show.artistAvatarUrls[0]) || null;
+            if (firstImg) {
                 const avatar = document.createElement('img');
                 avatar.className = 'artist-avatar';
-                avatar.src = show.firstArtistAvatarUrl;
+                avatar.src = firstImg;
                 avatar.alt = show.artists[0] || '';
                 avatar.loading = 'lazy';
-                avatar.addEventListener('click', () => openImgPopup(show.firstArtistAvatarUrl, show.artists[0] || ''));
+                avatar.addEventListener('click', () => {
+                    const images = (show.artistAvatarUrls || [show.firstArtistAvatarUrl])
+                        .map((src, i) => ({ src: src || '', alt: show.artists[i] || '' }))
+                        .filter(i => i.src);
+                    openImgPopup(images.length ? images : [{ src: firstImg, alt: show.artists[0] || '' }], 0);
+                });
                 dateDiv.appendChild(avatar);
             }
 

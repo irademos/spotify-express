@@ -482,6 +482,28 @@
         }
         .img-popup-close:hover { background: var(--surface-hover); }
 
+        .img-popup-nav {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 40px; height: 40px;
+            background: rgba(0,0,0,0.55);
+            color: #fff;
+            border: none; border-radius: 50%;
+            font-size: 28px; line-height: 1; cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            padding: 0; z-index: 10; transition: background 0.15s;
+        }
+        .img-popup-nav:hover { background: rgba(0,0,0,0.8); }
+        .img-popup-nav[hidden] { display: none !important; }
+        .img-popup-prev { left: -50px; }
+        .img-popup-next { right: -50px; }
+        .img-popup-label {
+            position: absolute; bottom: -28px; left: 0; right: 0;
+            text-align: center; color: #fff; font-size: 13px;
+            text-shadow: 0 1px 4px rgba(0,0,0,0.8);
+        }
+
         /* Spotify concert icon */
         .concert-link {
             display: inline-flex; align-items: center; justify-content: center;
@@ -683,7 +705,10 @@
     <div class="img-popup-overlay" id="imgPopupOverlay">
         <div class="img-popup-inner">
             <button class="img-popup-close" id="imgPopupClose" title="Close">&times;</button>
+            <button class="img-popup-nav img-popup-prev" id="imgPopupPrev" title="Previous band">&lsaquo;</button>
             <img id="imgPopupImg" src="" alt="">
+            <div class="img-popup-label" id="imgPopupLabel"></div>
+            <button class="img-popup-nav img-popup-next" id="imgPopupNext" title="Next band">&rsaquo;</button>
         </div>
     </div>
 
@@ -734,10 +759,33 @@
         // ── Image popup ───────────────────────────────────────────────────────
         const imgPopupOverlay = document.getElementById('imgPopupOverlay');
         const imgPopupImg     = document.getElementById('imgPopupImg');
+        const imgPopupLabel   = document.getElementById('imgPopupLabel');
+        const imgPopupPrev    = document.getElementById('imgPopupPrev');
+        const imgPopupNext    = document.getElementById('imgPopupNext');
 
-        function openImgPopup(src, alt) {
-            imgPopupImg.src = src;
-            imgPopupImg.alt = alt;
+        let popupImages = [];
+        let popupIndex  = 0;
+
+        function renderPopupImage() {
+            const entry = popupImages[popupIndex];
+            imgPopupImg.src = entry.src;
+            imgPopupImg.alt = entry.alt;
+            imgPopupLabel.textContent = popupImages.length > 1
+                ? `${entry.alt} (${popupIndex + 1}/${popupImages.length})` : '';
+            if (imgPopupPrev) imgPopupPrev.hidden = popupIndex === 0;
+            if (imgPopupNext) imgPopupNext.hidden = popupIndex === popupImages.length - 1;
+        }
+
+        function openImgPopup(images, startIndex) {
+            if (typeof images === 'string') {
+                popupImages = [{ src: images, alt: startIndex || '' }];
+                popupIndex = 0;
+            } else {
+                popupImages = images.filter(i => i.src);
+                popupIndex = Math.min(startIndex || 0, popupImages.length - 1);
+            }
+            if (!popupImages.length) return;
+            renderPopupImage();
             imgPopupOverlay.classList.add('active');
         }
         function closeImgPopup() {
@@ -745,9 +793,22 @@
             imgPopupImg.src = '';
         }
 
+        if (imgPopupPrev) imgPopupPrev.addEventListener('click', e => {
+            e.stopPropagation();
+            if (popupIndex > 0) { popupIndex--; renderPopupImage(); }
+        });
+        if (imgPopupNext) imgPopupNext.addEventListener('click', e => {
+            e.stopPropagation();
+            if (popupIndex < popupImages.length - 1) { popupIndex++; renderPopupImage(); }
+        });
+
         document.getElementById('imgPopupClose').addEventListener('click', closeImgPopup);
         imgPopupOverlay.addEventListener('click', e => { if (e.target === imgPopupOverlay) closeImgPopup(); });
-        document.addEventListener('keydown', e => { if (e.key === 'Escape') closeImgPopup(); });
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape') closeImgPopup();
+            if (e.key === 'ArrowLeft' && imgPopupOverlay.classList.contains('active') && popupIndex > 0) { popupIndex--; renderPopupImage(); }
+            if (e.key === 'ArrowRight' && imgPopupOverlay.classList.contains('active') && popupIndex < popupImages.length - 1) { popupIndex++; renderPopupImage(); }
+        });
 
         // ── Toast ─────────────────────────────────────────────────────────────
         let toastTimer = null;
@@ -1506,13 +1567,19 @@
                 // Date + avatar cell
                 const dateCell = document.createElement('div');
                 dateCell.className = 'show-date-cell';
-                if (show.firstArtistAvatarUrl) {
+                const firstImg = show.firstArtistAvatarUrl || (show.artistAvatarUrls && show.artistAvatarUrls[0]) || null;
+                if (firstImg) {
                     const img = document.createElement('img');
                     img.className = 'artist-avatar';
-                    img.src = show.firstArtistAvatarUrl;
+                    img.src = firstImg;
                     img.alt = show.artists[0] || '';
                     img.loading = 'lazy';
-                    img.addEventListener('click', () => openImgPopup(show.firstArtistAvatarUrl, show.artists[0] || ''));
+                    img.addEventListener('click', () => {
+                        const images = (show.artistAvatarUrls || [show.firstArtistAvatarUrl])
+                            .map((src, i) => ({ src: src || '', alt: show.artists[i] || '' }))
+                            .filter(i => i.src);
+                        openImgPopup(images.length ? images : [{ src: firstImg, alt: show.artists[0] || '' }], 0);
+                    });
                     dateCell.appendChild(img);
                 }
 
