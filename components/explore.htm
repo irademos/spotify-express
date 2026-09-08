@@ -54,7 +54,7 @@
             font-family: 'Arial', sans-serif;
             background-color: var(--bg);
             min-height: 100vh;
-            padding: 24px 16px 120px;
+            padding: 24px 16px 160px;
             color: var(--text-primary);
             transition: background-color 0.2s, color 0.2s;
         }
@@ -426,7 +426,7 @@
             border-bottom: 1px solid var(--border-light);
         }
 
-        .yt-now-playing-info { flex: 1; min-width: 0; }
+        .yt-now-playing-info { flex: 1; min-width: 0; } /* cursor/select overridden below */
         .yt-artist-name {
             font-size: 13px; font-weight: 700;
             color: var(--text-primary);
@@ -498,6 +498,45 @@
         }
         .date-link:hover .date-main { color: #1db954; }
 
+        /* Clickable title in players */
+        .yt-now-playing-info, .sp-now-playing-info {
+            flex: 1; min-width: 0; cursor: pointer; user-select: none;
+        }
+
+        /* Links overlay inside expanded player area */
+        .player-links-bar {
+            display: flex; gap: 6px; padding: 6px 10px;
+            background: rgba(0,0,0,0.55); backdrop-filter: blur(4px);
+            flex-wrap: wrap;
+        }
+        .player-ext-link {
+            display: inline-flex; align-items: center; gap: 4px;
+            font-size: 11px; font-weight: 600; padding: 3px 8px;
+            border-radius: 12px; text-decoration: none;
+            border: 1px solid rgba(255,255,255,0.3);
+            color: #fff; white-space: nowrap;
+            transition: background 0.15s;
+        }
+        .player-ext-link:hover { background: rgba(255,255,255,0.2); }
+        .player-ext-link.yt  { border-color: #ff0000; color: #ff5555; }
+        .player-ext-link.sp  { border-color: #1db954; color: #1db954; }
+        .player-ext-link.goog { border-color: #aaa; color: #ddd; }
+
+        /* YT links bar inside video area */
+        #ytVideoWrap .player-links-bar {
+            position: absolute; bottom: 0; left: 0; right: 0;
+        }
+        .yt-video-wrap { position: relative; }
+
+        /* Location button */
+        .loc-btn {
+            background: none; border: none; color: var(--text-muted);
+            cursor: pointer; font-size: 14px; padding: 4px 5px;
+            border-radius: 4px; line-height: 1;
+            transition: background 0.15s, color 0.15s;
+        }
+        .loc-btn:hover { color: #1db954; background: rgba(29,185,84,0.1); }
+
         @media (max-width: 600px) {
             body { padding: 12px 8px 160px; }
 
@@ -548,17 +587,19 @@
             .show-date .date-main { font-size: 15px; }
             .play-btn { width: 24px; height: 24px; min-width: 24px; font-size: 10px; }
 
-            /* Floating player — full width, clear browser chrome */
+            /* Floating player — full width, flush to bottom */
             #yt-player-card {
-                left: 12px;
-                right: 12px;
+                left: 0;
+                right: 0;
                 width: auto;
-                bottom: max(80px, calc(60px + env(safe-area-inset-bottom, 0px)));
+                bottom: 0;
+                border-radius: 10px 10px 0 0;
                 overflow: hidden;
             }
             /* YT API replaces the div with an iframe using the same id */
             #yt-iframe-container { width: 100% !important; height: auto !important; aspect-ratio: 16/9; }
             .yt-video-wrap.expanded { height: auto; }
+
         }
     </style>
 </head>
@@ -652,11 +693,12 @@
     <!-- Floating YouTube player -->
     <div id="yt-player-card">
         <div class="yt-player-header">
-            <div class="yt-now-playing-info">
+            <div class="yt-now-playing-info" id="ytNowPlayingInfo" title="Tap to expand/collapse">
                 <div class="yt-artist-name" id="ytArtistName">—</div>
                 <div class="yt-song-name" id="ytSongName">—</div>
             </div>
             <div class="yt-header-btns">
+                <button class="loc-btn" id="ytLocBtn" title="Scroll to event">📍</button>
                 <button class="yt-ctrl-btn" id="ytPrevBtn" title="Previous artist">⏮</button>
                 <button class="yt-ctrl-btn accent" id="ytPlayPauseBtn" title="Play/Pause">⏸</button>
                 <button class="yt-ctrl-btn" id="ytNextBtn" title="Next artist">⏭</button>
@@ -667,6 +709,11 @@
         </div>
         <div class="yt-video-wrap expanded" id="ytVideoWrap">
             <div id="yt-iframe-container"></div>
+            <div class="player-links-bar" id="ytLinksBar">
+                <a class="player-ext-link yt" id="ytExtYt" href="#" target="_blank" rel="noopener">▶ YouTube</a>
+                <a class="player-ext-link goog" id="ytExtGoogle" href="#" target="_blank" rel="noopener">🔍 Google</a>
+                <a class="player-ext-link sp" id="ytExtSpotify" href="#" target="_blank" rel="noopener">♫ Spotify</a>
+            </div>
         </div>
     </div>
 
@@ -1340,6 +1387,18 @@
 
             document.getElementById('ytArtistName').textContent = artistName;
             document.getElementById('ytSongName').textContent   = songName;
+
+            // Update external links
+            const gq = encodeURIComponent(artistName + ' music');
+            document.getElementById('ytExtYt').href     = `https://www.youtube.com/results?search_query=${encodeURIComponent(artistName)}`;
+            document.getElementById('ytExtGoogle').href = `https://www.google.com/search?q=${gq}`;
+            const show = allShows[showIdx];
+            const aIdxForSpotify = (show?.artists ?? []).indexOf(artistName);
+            const spId = show?.spotifyArtistIds?.[aIdxForSpotify];
+            document.getElementById('ytExtSpotify').href = spId
+                ? `https://open.spotify.com/artist/${spId}`
+                : `https://open.spotify.com/search/${encodeURIComponent(artistName)}`;
+
             // Card becomes visible in onStateChange(PLAYING) so a blocked/non-embeddable
             // video never flashes on screen before the error handler closes it.
 
@@ -1397,14 +1456,23 @@
             }
         });
 
-        document.getElementById('ytToggleVideo').addEventListener('click', () => {
+        function toggleYtVideo() {
             const wrap = document.getElementById('ytVideoWrap');
             const btn  = document.getElementById('ytToggleVideo');
             videoShown = !videoShown;
             wrap.classList.toggle('expanded', videoShown);
             wrap.classList.toggle('collapsed', !videoShown);
-            btn.title   = videoShown ? 'Hide video' : 'Show video';
+            btn.title       = videoShown ? 'Hide video' : 'Show video';
             btn.textContent = videoShown ? '▼' : '▲';
+        }
+
+        document.getElementById('ytToggleVideo').addEventListener('click', toggleYtVideo);
+        document.getElementById('ytNowPlayingInfo').addEventListener('click', toggleYtVideo);
+
+        document.getElementById('ytLocBtn').addEventListener('click', () => {
+            if (activeShowIdx === null) return;
+            const el = document.querySelector(`.show-item[data-idx="${activeShowIdx}"]`);
+            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
         });
 
         // ── Shows rendering ───────────────────────────────────────────────────
@@ -1612,5 +1680,6 @@
     </script>
 
     <script src="https://www.youtube.com/iframe_api"></script>
+
 </body>
 </html>

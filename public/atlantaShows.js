@@ -320,6 +320,85 @@ document.addEventListener('DOMContentLoaded', function () {
     let currentPlayingKey = null;
     let isPlaying = false;
     let lastPosition = 0;
+    let spImgShown = true;
+
+    // ── Floating Spotify player UI ────────────────────────────────────────────
+    function updateFloatingPlayer(artistName, songName, artistId, imgUrl) {
+        const card = document.getElementById('sp-player-card');
+        if (!card) return;
+        card.classList.add('visible');
+        document.getElementById('spArtistName').textContent = artistName || '—';
+        document.getElementById('spSongName').textContent   = songName || '—';
+        const img = document.getElementById('sp-artist-img');
+        if (img) { img.src = imgUrl || ''; img.style.display = imgUrl ? 'block' : 'none'; }
+        // External links
+        const yt = document.getElementById('spExtYt');
+        const gg = document.getElementById('spExtGoogle');
+        const sp = document.getElementById('spExtSpotify');
+        if (yt) yt.href = `https://www.youtube.com/results?search_query=${encodeURIComponent(artistName)}`;
+        if (gg) gg.href = `https://www.google.com/search?q=${encodeURIComponent(artistName + ' music')}`;
+        if (sp) sp.href = artistId
+            ? `https://open.spotify.com/artist/${artistId}`
+            : `https://open.spotify.com/search/${encodeURIComponent(artistName)}`;
+    }
+
+    function updateFloatingPlayerPlayState(playing) {
+        const btn = document.getElementById('spPlayPauseBtn');
+        if (btn) btn.textContent = playing ? '⏸' : '▶';
+    }
+
+    // Wire floating player controls (runs inside outer DOMContentLoaded so DOM is ready)
+    (function wireFloatingPlayer() {
+        const spPlayPause = document.getElementById('spPlayPauseBtn');
+        if (!spPlayPause) return; // player not in DOM (page without player)
+        spPlayPause.addEventListener('click', () => {
+            if (isPlaying) { player?.pause(); } else { player?.resume(); }
+        });
+
+        document.getElementById('spCloseBtn')?.addEventListener('click', () => {
+            player?.pause();
+            isPlaying = false;
+            currentPlayingKey = null;
+            updateAllPlayButtons();
+            updateFloatingPlayerPlayState(false);
+            document.getElementById('sp-player-card')?.classList.remove('visible');
+        });
+
+        function toggleSpImg() {
+            const wrap = document.getElementById('spImgWrap');
+            const btn  = document.getElementById('spToggleImg');
+            spImgShown = !spImgShown;
+            wrap?.classList.toggle('expanded', spImgShown);
+            wrap?.classList.toggle('collapsed', !spImgShown);
+            if (btn) btn.textContent = spImgShown ? '▼' : '▲';
+        }
+        document.getElementById('spToggleImg')?.addEventListener('click', toggleSpImg);
+        document.getElementById('spNowPlayingInfo')?.addEventListener('click', toggleSpImg);
+
+        document.getElementById('spLocBtn')?.addEventListener('click', () => {
+            if (!currentPlayingKey) return;
+            const showPart = currentPlayingKey.slice(0, currentPlayingKey.indexOf('::artist::'));
+            const el = document.querySelector(`.show-item[data-showKey="${CSS.escape(showPart)}"]`);
+            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        });
+
+        document.getElementById('spPrevBtn')?.addEventListener('click', () => {
+            if (!currentPlayingKey) return;
+            const sep = '::artist::';
+            const sepIdx = currentPlayingKey.indexOf(sep);
+            const showPart = currentPlayingKey.slice(0, sepIdx);
+            const artistIdx = parseInt(currentPlayingKey.slice(sepIdx + sep.length));
+            const visible = getVisibleShows();
+            const currentShow = visible.find(s => showKey(s) === showPart);
+            if (!currentShow) return;
+            const prevIdx = artistIdx - 1;
+            if (prevIdx >= 0) { playShow(currentShow, prevIdx); return; }
+            const visIdx = visible.indexOf(currentShow);
+            if (visIdx > 0) { const prev = visible[visIdx - 1]; playShow(prev, prev.artists.length - 1); }
+        });
+
+        document.getElementById('spNextBtn')?.addEventListener('click', playNextArtist);
+    })();
 
     window.onSpotifyWebPlaybackSDKReady = () => {
         const token = document.cookie.match(/spotifyAccessToken=([^;]+)/)?.[1];
@@ -341,7 +420,8 @@ document.addEventListener('DOMContentLoaded', function () {
             // Detect natural song end: was playing at a non-zero position, now paused at 0
             if (isPlaying && state.paused && state.position === 0 && lastPosition > 5000) {
                 isPlaying = false;
-                updateAllPlayButtons(); // clear pause symbols while next track loads
+                updateAllPlayButtons();
+                updateFloatingPlayerPlayState(false);
                 playNextArtist();
                 return;
             }
@@ -352,6 +432,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
             isPlaying = !state.paused;
             updateAllPlayButtons();
+            updateFloatingPlayerPlayState(isPlaying);
         });
 
         player.connect();
@@ -500,6 +581,12 @@ document.addEventListener('DOMContentLoaded', function () {
             currentPlayingKey = key;
             isPlaying = true;
             updateAllPlayButtons();
+            updateFloatingPlayerPlayState(true);
+
+            // Update floating player UI
+            const trackName = tracksData.tracks?.[0]?.name || '';
+            const imgUrl = show.firstArtistAvatarUrl || '';
+            updateFloatingPlayer(artistName, trackName, artistId, imgUrl);
         } catch (err) {
             console.error('Error playing artist:', artistName, err);
         }
@@ -726,18 +813,15 @@ document.addEventListener('DOMContentLoaded', function () {
             dateInfo.className = 'show-date';
             const dateContent = `<div class="date-main">${escHtml(date.monthStr)} ${date.dayNum}</div><div class="date-sub">${date.dayOfWeek}, ${date.year}</div>`;
 
-            if (show.concertUri) {
-                const concertId = show.concertUri.split(':')[2];
-                const dateLink = document.createElement('a');
-                dateLink.href = `https://open.spotify.com/concert/${concertId}`;
-                dateLink.target = '_blank';
-                dateLink.rel = 'noopener noreferrer';
-                dateLink.className = 'date-link';
-                dateLink.innerHTML = dateContent;
-                dateInfo.appendChild(dateLink);
-            } else {
-                dateInfo.innerHTML = dateContent;
-            }
+            // Date always links to Google search for the event
+            const googleQuery = `${date.monthStr} ${date.dayNum} ${date.year} ${show.artists[0] || ''} ${show.venue}`;
+            const dateLink = document.createElement('a');
+            dateLink.href = `https://www.google.com/search?q=${encodeURIComponent(googleQuery)}`;
+            dateLink.target = '_blank';
+            dateLink.rel = 'noopener noreferrer';
+            dateLink.className = 'date-link';
+            dateLink.innerHTML = dateContent;
+            dateInfo.appendChild(dateLink);
 
             dateDiv.appendChild(dateInfo);
 
@@ -794,6 +878,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
             const venueDiv = document.createElement('div');
             venueDiv.className = 'show-venue-name';
+            venueDiv.style.cssText = 'display:flex;flex-direction:column;align-items:flex-end;gap:4px;';
             const venueLink = document.createElement('a');
             venueLink.className = 'venue-link';
             venueLink.textContent = show.venue;
@@ -801,6 +886,18 @@ document.addEventListener('DOMContentLoaded', function () {
             venueLink.target = '_blank';
             venueLink.rel = 'noopener noreferrer';
             venueDiv.appendChild(venueLink);
+
+            if (show.concertUri) {
+                const concertId = show.concertUri.split(':')[2];
+                const spotifyBtn = document.createElement('a');
+                spotifyBtn.className = 'concert-link';
+                spotifyBtn.href = `https://open.spotify.com/concert/${concertId}`;
+                spotifyBtn.target = '_blank';
+                spotifyBtn.rel = 'noopener noreferrer';
+                spotifyBtn.title = 'View on Spotify';
+                spotifyBtn.innerHTML = `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/></svg>`;
+                venueDiv.appendChild(spotifyBtn);
+            }
 
             li.appendChild(dateDiv);
             li.appendChild(artistsDiv);
