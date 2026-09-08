@@ -875,6 +875,57 @@ app.get('/api/chartmetric-search', async (req, res) => {
     }
 });
 
+app.get('/api/venue-search', async (req: any, res: any) => {
+    const name = (req.query.name as string || '').trim();
+    const city = (req.query.city as string || '').trim();
+    if (!name) return res.status(400).json({ error: 'Missing venue name' });
+
+    const query = city
+        ? `site:open.spotify.com/venue "${name}" ${city}`
+        : `site:open.spotify.com/venue "${name}"`;
+
+    try {
+        const response = await axios.get('https://html.duckduckgo.com/html/', {
+            params: { q: query },
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Accept': 'text/html,application/xhtml+xml',
+            },
+            timeout: 12000,
+        });
+
+        const $ = cheerio.load(response.data as string);
+        const results: Array<{title: string; url: string; venueId: string; snippet: string}> = [];
+        const seen = new Set<string>();
+
+        $('.result__a').each((_, el) => {
+            const href = $(el).attr('href') || '';
+            const title = $(el).text().trim();
+            // DuckDuckGo wraps the real URL in a redirect; parse it out
+            const uddg = href.match(/uddg=([^&]+)/);
+            const actualUrl = uddg ? decodeURIComponent(uddg[1]) : href;
+            const venueMatch = actualUrl.match(/open\.spotify\.com\/venue\/([A-Za-z0-9]+)/);
+            if (!venueMatch) return;
+            const venueId = venueMatch[1];
+            if (seen.has(venueId)) return;
+            seen.add(venueId);
+            const snippet = $(el).closest('.result').find('.result__snippet').text().trim();
+            results.push({
+                title,
+                url: `https://open.spotify.com/venue/${venueId}`,
+                venueId,
+                snippet,
+            });
+        });
+
+        res.json({ results, query });
+    } catch (err: any) {
+        console.error('Venue search error:', err.message);
+        res.status(500).json({ error: 'Search failed', details: err.message });
+    }
+});
+
 app.get('/api/scrape', function (req, res) {
   console.log("here for scrape.")
   const url = req.query.url;
