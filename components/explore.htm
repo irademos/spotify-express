@@ -377,7 +377,7 @@
         }
         @keyframes spin { to { transform: rotate(360deg); } }
 
-        .show-venue-name { font-size: 13px; color: var(--text-secondary); text-align: right; min-width: 0; overflow: hidden; }
+        .show-venue-name { font-size: 13px; color: var(--text-secondary); text-align: right; min-width: 0; overflow: hidden; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
 
         .venue-link { color: inherit; text-decoration: none; }
         .venue-link:hover { color: #1db954; text-decoration: underline; }
@@ -595,6 +595,9 @@
                 justify-content: flex-start !important;
                 font-size: 12px;
                 margin-top: 0;
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
             }
             .show-artists {
                 grid-area: artists;
@@ -673,8 +676,11 @@
                     <button class="inline-confirm-btn" id="addVenueConfirm">Add</button>
                     <button class="inline-cancel-btn" id="addVenueCancel">Cancel</button>
                 </div>
-                <button id="triggerScrapeBtn" title="Run the scraper now" style="margin-left:8px;background:#1DB954;color:#fff;border:none;font-size:13px;padding:6px 12px;">&#9654; Check for Updates</button>
-                <span id="triggerScrapeStatus" style="font-size:12px;color:var(--text-muted);margin-left:6px;"></span>
+                <button id="settingsToggleBtn" title="Settings" style="margin-left:8px;background:none;border:1px solid var(--border);color:var(--text-secondary);font-size:15px;padding:4px 8px;border-radius:4px;cursor:pointer;line-height:1;">&#9881;</button>
+            </div>
+            <div id="advancedSettingsRow" style="display:none;margin-top:6px;align-items:center;gap:6px;flex-wrap:wrap;">
+                <button id="triggerScrapeBtn" title="Run the scraper now" style="background:#1DB954;color:#fff;border:none;font-size:13px;padding:6px 12px;">&#9654; Check for Updates</button>
+                <span id="triggerScrapeStatus" style="font-size:12px;color:var(--text-muted);"></span>
             </div>
         </div>
 
@@ -694,7 +700,6 @@
                     <div id="venueCheckboxes"></div>
                 </div>
             </div>
-            <span id="ytStatusNote" style="font-size:12px;color:var(--text-muted);">▶ YouTube audio</span>
         </div>
 
         <div id="showsMeta" class="shows-meta"></div>
@@ -1142,6 +1147,14 @@
 
         document.getElementById('addVenueConfirm').addEventListener('click', submitAddVenue);
         addVenueInput.addEventListener('keydown', e => { if (e.key === 'Enter') submitAddVenue(); });
+
+        // Settings toggle
+        document.getElementById('settingsToggleBtn').addEventListener('click', function () {
+            const row = document.getElementById('advancedSettingsRow');
+            const open = row.style.display === 'none';
+            row.style.display = open ? 'flex' : 'none';
+            this.style.color = open ? '#1DB954' : '';
+        });
 
         // Check for updates
         document.getElementById('triggerScrapeBtn').addEventListener('click', async function () {
@@ -1657,7 +1670,6 @@
                 venueDiv.className = 'show-venue-name';
                 venueDiv.style.display = 'flex';
                 venueDiv.style.flexDirection = 'column';
-                venueDiv.style.alignItems = 'flex-end';
                 venueDiv.style.gap = '4px';
 
                 const venueLink = document.createElement('a');
@@ -1721,12 +1733,6 @@
                         allApiVenues = rawVenues.map((v, i) => ({ id: v.id, name: v.id, displayName: `Venue ${i + 1}` }));
                     }
 
-                    if (Object.keys(artistTopSongs).length === 0 && allShows.length > 0) {
-                        document.getElementById('ytStatusNote').textContent =
-                            '▶ Song data not yet loaded — trigger "Check for Updates" first';
-                    } else {
-                        document.getElementById('ytStatusNote').textContent = '▶ YouTube audio';
-                    }
 
                     rebuildVenuesForCity();
                 })

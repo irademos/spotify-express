@@ -285,6 +285,14 @@ document.addEventListener('DOMContentLoaded', function () {
         if (d.isAdmin) document.getElementById('adminLink').style.display = '';
     }).catch(() => {});
 
+    // Settings toggle
+    document.getElementById('settingsToggleBtn').addEventListener('click', function () {
+        const row = document.getElementById('advancedSettingsRow');
+        const open = row.style.display === 'none';
+        row.style.display = open ? 'flex' : 'none';
+        this.style.color = open ? '#1DB954' : '';
+    });
+
     // Trigger scrape GitHub Action
     document.getElementById('triggerScrapeBtn').addEventListener('click', async function () {
         const btn = this;
@@ -922,7 +930,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
             const venueDiv = document.createElement('div');
             venueDiv.className = 'show-venue-name';
-            venueDiv.style.cssText = 'display:flex;flex-direction:column;align-items:flex-end;gap:4px;';
+            venueDiv.style.cssText = 'display:flex;flex-direction:column;gap:4px;';
             const venueLink = document.createElement('a');
             venueLink.className = 'venue-link';
             venueLink.textContent = show.venue;
