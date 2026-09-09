@@ -880,29 +880,32 @@ app.get('/api/venue-search', async (req: any, res: any) => {
     const city = (req.query.city as string || '').trim();
     if (!name) return res.status(400).json({ error: 'Missing venue name' });
 
+    const braveKey = process.env.BRAVE_SEARCH_KEY;
+    if (!braveKey) {
+        return res.status(500).json({ error: 'Search not configured (missing BRAVE_SEARCH_KEY)' });
+    }
+
     const query = city
         ? `site:open.spotify.com/venue "${name}" ${city}`
         : `site:open.spotify.com/venue "${name}"`;
 
-    const apiKey = process.env.GOOGLE_KEY;
-    const cx = process.env.GOOGLE_SEARCH_KEY;
-
-    if (!apiKey || !cx) {
-        return res.status(500).json({ error: 'Search not configured (missing GOOGLE_KEY / GOOGLE_SEARCH_KEY)' });
-    }
-
     try {
-        const response = await axios.get('https://www.googleapis.com/customsearch/v1', {
-            params: { key: apiKey, cx, q: query, num: 10 },
+        const response = await axios.get('https://api.search.brave.com/res/v1/web/search', {
+            headers: {
+                'Accept': 'application/json',
+                'Accept-Encoding': 'gzip',
+                'X-Subscription-Token': braveKey,
+            },
+            params: { q: query, count: 10 },
             timeout: 12000,
         });
 
-        const items: any[] = response.data.items || [];
+        const webResults: any[] = response.data?.web?.results || [];
         const results: Array<{title: string; url: string; venueId: string; snippet: string}> = [];
         const seen = new Set<string>();
 
-        for (const item of items) {
-            const url: string = item.link || '';
+        for (const item of webResults) {
+            const url: string = item.url || '';
             const venueMatch = url.match(/open\.spotify\.com\/venue\/([A-Za-z0-9]+)/);
             if (!venueMatch) continue;
             const venueId = venueMatch[1];
@@ -912,7 +915,7 @@ app.get('/api/venue-search', async (req: any, res: any) => {
                 title: item.title || venueId,
                 url: `https://open.spotify.com/venue/${venueId}`,
                 venueId,
-                snippet: item.snippet || '',
+                snippet: item.description || '',
             });
         }
 
