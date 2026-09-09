@@ -884,37 +884,44 @@ app.get('/api/venue-search', async (req: any, res: any) => {
         ? `site:open.spotify.com/venue "${name}" ${city}`
         : `site:open.spotify.com/venue "${name}"`;
 
-    const apiKey = process.env.GOOGLE_KEY;
-    const cx = process.env.GOOGLE_SEARCH_KEY;
-
-    if (!apiKey || !cx) {
-        return res.status(500).json({ error: 'Search not configured (missing GOOGLE_KEY / GOOGLE_SEARCH_KEY)' });
-    }
-
     try {
-        const response = await axios.get('https://www.googleapis.com/customsearch/v1', {
-            params: { key: apiKey, cx, q: query, num: 10 },
+        // Use DuckDuckGo HTML search — no API key required
+        const ddgRes = await axios.get('https://html.duckduckgo.com/html/', {
+            params: { q: query },
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (compatible; venue-search-bot/1.0)',
+                'Accept': 'text/html',
+            },
             timeout: 12000,
         });
 
-        const items: any[] = response.data.items || [];
+        const $ = cheerio.load(ddgRes.data);
         const results: Array<{title: string; url: string; venueId: string; snippet: string}> = [];
         const seen = new Set<string>();
 
-        for (const item of items) {
-            const url: string = item.link || '';
+        $('a.result__url, a.result__a').each((_, el) => {
+            const href: string = $(el).attr('href') || '';
+            // DDG wraps links; extract the actual URL from uddg param or direct href
+            let url = href;
+            try {
+                const parsed = new URL(href, 'https://html.duckduckgo.com');
+                url = parsed.searchParams.get('uddg') || href;
+            } catch { /* use href as-is */ }
+
             const venueMatch = url.match(/open\.spotify\.com\/venue\/([A-Za-z0-9]+)/);
-            if (!venueMatch) continue;
+            if (!venueMatch) return;
             const venueId = venueMatch[1];
-            if (seen.has(venueId)) continue;
+            if (seen.has(venueId)) return;
             seen.add(venueId);
+            const title = $(el).text().trim() || venueId;
+            const snippet = $(el).closest('.result').find('.result__snippet').text().trim();
             results.push({
-                title: item.title || venueId,
+                title,
                 url: `https://open.spotify.com/venue/${venueId}`,
                 venueId,
-                snippet: item.snippet || '',
+                snippet,
             });
-        }
+        });
 
         res.json({ results, query });
     } catch (err: any) {
