@@ -880,69 +880,46 @@ app.get('/api/venue-search', async (req: any, res: any) => {
     const city = (req.query.city as string || '').trim();
     if (!name) return res.status(400).json({ error: 'Missing venue name' });
 
-    const searchQuery = city ? `${name} ${city}` : name;
+    const braveKey = process.env.BRAVE_SEARCH_KEY;
+    if (!braveKey) {
+        return res.status(500).json({ error: 'Search not configured (missing BRAVE_SEARCH_KEY)' });
+    }
+
+    const query = city
+        ? `site:open.spotify.com/venue "${name}" ${city}`
+        : `site:open.spotify.com/venue "${name}"`;
 
     try {
-        // Fetch Spotify's own venue search page and extract __NEXT_DATA__
-        const spotifyUrl = `https://open.spotify.com/search/${encodeURIComponent(searchQuery)}/venues`;
-        const pageRes = await axios.get(spotifyUrl, {
+        const response = await axios.get('https://api.search.brave.com/res/v1/web/search', {
             headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                'Accept-Language': 'en-US,en;q=0.5',
+                'Accept': 'application/json',
+                'Accept-Encoding': 'gzip',
+                'X-Subscription-Token': braveKey,
             },
+            params: { q: query, count: 10 },
             timeout: 12000,
         });
 
-        const $ = cheerio.load(pageRes.data);
-        const nextDataScript = $('#__NEXT_DATA__').html();
-
+        const webResults: any[] = response.data?.web?.results || [];
         const results: Array<{title: string; url: string; venueId: string; snippet: string}> = [];
         const seen = new Set<string>();
 
-        if (nextDataScript) {
-            try {
-                const nextData = JSON.parse(nextDataScript);
-                // Venue results live at different paths depending on Spotify's page structure
-                const entities: any[] =
-                    nextData?.props?.pageProps?.state?.data?.searchV2?.venues?.items ||
-                    nextData?.props?.pageProps?.state?.data?.searchResults?.venues?.items ||
-                    [];
-
-                for (const item of entities) {
-                    const venue = item?.data || item;
-                    const id: string = venue?.id || venue?.uri?.split(':').pop() || '';
-                    if (!id || seen.has(id)) continue;
-                    seen.add(id);
-                    results.push({
-                        title: venue?.name || id,
-                        url: `https://open.spotify.com/venue/${id}`,
-                        venueId: id,
-                        snippet: [venue?.city?.name, venue?.country?.name].filter(Boolean).join(', '),
-                    });
-                }
-            } catch { /* JSON parse failed */ }
+        for (const item of webResults) {
+            const url: string = item.url || '';
+            const venueMatch = url.match(/open\.spotify\.com\/venue\/([A-Za-z0-9]+)/);
+            if (!venueMatch) continue;
+            const venueId = venueMatch[1];
+            if (seen.has(venueId)) continue;
+            seen.add(venueId);
+            results.push({
+                title: item.title || venueId,
+                url: `https://open.spotify.com/venue/${venueId}`,
+                venueId,
+                snippet: item.description || '',
+            });
         }
 
-        // Fallback: scan raw HTML for any venue URLs embedded in the page
-        if (results.length === 0) {
-            const venueRe = /open\.spotify\.com\/venue\/([A-Za-z0-9]+)/g;
-            const html: string = pageRes.data;
-            let m: RegExpExecArray | null;
-            while ((m = venueRe.exec(html)) !== null) {
-                const venueId = m[1];
-                if (seen.has(venueId)) continue;
-                seen.add(venueId);
-                results.push({
-                    title: venueId,
-                    url: `https://open.spotify.com/venue/${venueId}`,
-                    venueId,
-                    snippet: '',
-                });
-            }
-        }
-
-        res.json({ results, query: searchQuery });
+        res.json({ results, query });
     } catch (err: any) {
         console.error('Venue search error:', err.response?.data || err.message);
         res.status(500).json({ error: 'Search failed', details: err.message });
