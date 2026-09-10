@@ -908,7 +908,31 @@ document.addEventListener('DOMContentLoaded', function () {
         const container = document.getElementById('showsContainer');
         const meta = document.getElementById('showsMeta');
 
-        const visible = allShows.filter(s => selectedVenueIds.has(s.venueId) && isUpcoming(s));
+        const raw = allShows.filter(s => selectedVenueIds.has(s.venueId) && isUpcoming(s));
+
+        // Combine events with same venue and same Spotify artist IDs
+        const merged = new Map();
+        raw.forEach(show => {
+            const artistIdKey = (show.spotifyArtistIds || []).slice().sort().join(',');
+            const key = show.venueId + '|' + artistIdKey;
+            if (!merged.has(key)) {
+                merged.set(key, { ...show, allDatetimes: [show.datetime] });
+            } else {
+                const existing = merged.get(key);
+                existing.allDatetimes.push(show.datetime);
+                // Keep the earliest upcoming date
+                if (show.datetime < existing.datetime) {
+                    existing.datetime = show.datetime;
+                }
+            }
+        });
+
+        // Sort by date ascending, then alphabetically by venue name
+        const visible = [...merged.values()].sort((a, b) => {
+            const dateCmp = a.datetime.localeCompare(b.datetime);
+            if (dateCmp !== 0) return dateCmp;
+            return (a.venue || '').localeCompare(b.venue || '');
+        });
 
         if (visible.length === 0) {
             meta.textContent = '';
