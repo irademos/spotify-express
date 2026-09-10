@@ -522,12 +522,12 @@
 
         .yt-ctrl-btn {
             background: none; border: none; color: var(--text-secondary);
-            cursor: pointer; font-size: 16px; padding: 4px 6px;
+            cursor: pointer; font-size: 22px; padding: 4px 7px;
             border-radius: 4px; line-height: 1;
             transition: background 0.15s, color 0.15s;
         }
         .yt-ctrl-btn:hover { background: var(--surface-hover); color: var(--text-primary); }
-        .yt-ctrl-btn.accent { color: #1db954; font-size: 18px; }
+        .yt-ctrl-btn.accent { color: #1db954; font-size: 26px; }
         .yt-ctrl-btn.accent:hover { background: rgba(29,185,84,0.1); }
 
         .yt-video-wrap { overflow: hidden; transition: height 0.25s; position: relative; }
@@ -566,12 +566,12 @@
         .sp-header-btns { display: flex; align-items: center; gap: 4px; }
         .sp-ctrl-btn {
             background: none; border: none; color: var(--text-secondary);
-            cursor: pointer; font-size: 16px; padding: 4px 6px;
+            cursor: pointer; font-size: 22px; padding: 4px 7px;
             border-radius: 4px; line-height: 1;
             transition: background 0.15s, color 0.15s;
         }
         .sp-ctrl-btn:hover { background: var(--surface-hover); color: var(--text-primary); }
-        .sp-ctrl-btn.accent { color: #1db954; font-size: 18px; }
+        .sp-ctrl-btn.accent { color: #1db954; font-size: 26px; }
         .sp-ctrl-btn.accent:hover { background: rgba(29,185,84,0.1); }
 
         .sp-img-wrap { overflow: hidden; transition: height 0.25s; }
@@ -667,6 +667,11 @@
         .player-ext-link.yt  { border-color: #ff0000; color: #ff5555; }
         .player-ext-link.sp  { border-color: #1db954; color: #1db954; }
         .player-ext-link.goog { border-color: #aaa; color: #ddd; }
+        .player-ext-link.loc  { border-color: #aaa; color: #ddd; background: none; cursor: pointer; }
+        .player-ext-link.loc:hover { background: rgba(255,255,255,0.2); }
+        .player-ext-link.flag { border-color: #e67e22; color: #e67e22; background: none; cursor: pointer; }
+        .player-ext-link.flag:hover { background: rgba(230,126,34,0.2); }
+        .player-ext-link.flag:disabled { border-color: #1db954; color: #1db954; cursor: default; }
 
         /* YT links bar inside video area */
         #ytVideoWrap .player-links-bar {
@@ -879,13 +884,10 @@
                 <div class="yt-song-name" id="ytSongName">—</div>
             </div>
             <div class="yt-header-btns">
-                <button class="loc-btn" id="ytLocBtn" title="Scroll to event">📍</button>
                 <button class="yt-ctrl-btn" id="ytPrevBtn" title="Previous artist">⏮</button>
                 <button class="yt-ctrl-btn accent" id="ytPlayPauseBtn" title="Play/Pause">⏸</button>
                 <button class="yt-ctrl-btn" id="ytNextBtn" title="Next artist">⏭</button>
                 <button class="yt-ctrl-btn" id="ytToggleVideo" title="Hide video">▼</button>
-                <button class="yt-ctrl-btn" id="ytReportVideoBtn" title="Report this video" style="font-size:13px;color:var(--text-muted);">⚑</button>
-                <button class="yt-ctrl-btn" id="ytCloseBtn" title="Close">✕</button>
             </div>
         </div>
         <div class="yt-video-wrap expanded" id="ytVideoWrap">
@@ -894,6 +896,8 @@
                 <a class="player-ext-link yt" id="ytExtYt" href="#" target="_blank" rel="noopener">▶ YouTube</a>
                 <a class="player-ext-link goog" id="ytExtGoogle" href="#" target="_blank" rel="noopener">🔍 Google</a>
                 <a class="player-ext-link sp" id="ytExtSpotify" href="#" target="_blank" rel="noopener">♫ Spotify</a>
+                <button class="player-ext-link loc" id="ytLocBtn" title="Scroll to event">📍 Pin</button>
+                <button class="player-ext-link flag" id="ytReportVideoBtn" title="Report this video">⚑ Report</button>
             </div>
         </div>
     </div>
@@ -906,12 +910,10 @@
                 <div class="sp-song-name" id="spSongName">—</div>
             </div>
             <div class="sp-header-btns">
-                <button class="loc-btn" id="spLocBtn" title="Scroll to event">📍</button>
                 <button class="sp-ctrl-btn" id="spPrevBtn" title="Previous artist">⏮</button>
                 <button class="sp-ctrl-btn accent" id="spPlayPauseBtn" title="Play/Pause">⏸</button>
                 <button class="sp-ctrl-btn" id="spNextBtn" title="Next artist">⏭</button>
                 <button class="sp-ctrl-btn" id="spToggleImg" title="Show/hide image">▼</button>
-                <button class="sp-ctrl-btn" id="spCloseBtn" title="Close">✕</button>
             </div>
         </div>
         <div class="sp-img-wrap expanded" id="spImgWrap">
@@ -921,6 +923,7 @@
                     <a class="player-ext-link yt" id="spExtYt" href="#" target="_blank" rel="noopener">▶ YouTube</a>
                     <a class="player-ext-link goog" id="spExtGoogle" href="#" target="_blank" rel="noopener">🔍 Google</a>
                     <a class="player-ext-link sp" id="spExtSpotify" href="#" target="_blank" rel="noopener">♫ Spotify</a>
+                    <button class="player-ext-link loc" id="spLocBtn" title="Scroll to event">📍 Pin</button>
                 </div>
             </div>
         </div>
@@ -1836,17 +1839,27 @@
                 : ytPlayer.playVideo();
         });
 
-        document.getElementById('ytCloseBtn').addEventListener('click', () => {
-            ytClosePlayer();
-            ytActiveShowIdx = null; ytActiveArtistName = null; ytActiveArtistIdx = null;
-        });
-
         document.getElementById('ytPrevBtn').addEventListener('click', () => {
             if (ytActiveShowIdx !== null) ytPlayPrevArtist();
         });
         document.getElementById('ytNextBtn').addEventListener('click', () => {
             if (ytActiveShowIdx !== null) ytPlayNextArtist();
         });
+
+        // Swipe left = next, swipe right = prev
+        (function addYtSwipe() {
+            const card = document.getElementById('yt-player-card');
+            let startX = null;
+            card.addEventListener('touchstart', e => { startX = e.touches[0].clientX; }, { passive: true });
+            card.addEventListener('touchend', e => {
+                if (startX === null) return;
+                const dx = e.changedTouches[0].clientX - startX;
+                startX = null;
+                if (Math.abs(dx) < 50) return;
+                if (ytActiveShowIdx === null) return;
+                if (dx < 0) ytPlayNextArtist(); else ytPlayPrevArtist();
+            }, { passive: true });
+        })();
 
         document.getElementById('ytReportVideoBtn').addEventListener('click', async () => {
             if (!ytActiveArtistName || !ytActiveVideoId) return;
@@ -2078,15 +2091,22 @@
         document.getElementById('spPlayPauseBtn').addEventListener('click', () => {
             if (spIsPlaying) { spPlayer?.pause(); } else { spPlayer?.resume(); }
         });
-        document.getElementById('spCloseBtn').addEventListener('click', () => {
-            spPlayer?.pause();
-            spIsPlaying = false; spCurrentPlayingKey = null;
-            spUpdateAllPlayButtons();
-            spUpdateFloatingPlayerPlayState(false);
-            document.getElementById('sp-player-card').classList.remove('visible');
-        });
         document.getElementById('spPrevBtn').addEventListener('click', () => { spPlayPrevArtist(); });
         document.getElementById('spNextBtn').addEventListener('click', () => { spPlayNextArtist(); });
+
+        // Swipe left = next, swipe right = prev
+        (function addSpSwipe() {
+            const card = document.getElementById('sp-player-card');
+            let startX = null;
+            card.addEventListener('touchstart', e => { startX = e.touches[0].clientX; }, { passive: true });
+            card.addEventListener('touchend', e => {
+                if (startX === null) return;
+                const dx = e.changedTouches[0].clientX - startX;
+                startX = null;
+                if (Math.abs(dx) < 50) return;
+                if (dx < 0) spPlayNextArtist(); else spPlayPrevArtist();
+            }, { passive: true });
+        })();
 
         (function wireSpToggle() {
             function toggleSpImg() {
