@@ -441,21 +441,27 @@ document.addEventListener('DOMContentLoaded', function () {
         if (btn) btn.textContent = playing ? '⏸' : '▶';
     }
 
+    function playPrevArtist() {
+        if (!currentPlayingKey) return;
+        const sep = '::artist::';
+        const sepIdx = currentPlayingKey.indexOf(sep);
+        const showPart = currentPlayingKey.slice(0, sepIdx);
+        const artistIdx = parseInt(currentPlayingKey.slice(sepIdx + sep.length));
+        const visible = getVisibleShows();
+        const currentShow = visible.find(s => showKey(s) === showPart);
+        if (!currentShow) return;
+        const prevIdx = artistIdx - 1;
+        if (prevIdx >= 0) { playShow(currentShow, prevIdx); return; }
+        const visIdx = visible.indexOf(currentShow);
+        if (visIdx > 0) { const prev = visible[visIdx - 1]; playShow(prev, prev.artists.length - 1); }
+    }
+
     // Wire floating player controls (runs inside outer DOMContentLoaded so DOM is ready)
     (function wireFloatingPlayer() {
         const spPlayPause = document.getElementById('spPlayPauseBtn');
         if (!spPlayPause) return; // player not in DOM (page without player)
         spPlayPause.addEventListener('click', () => {
             if (isPlaying) { player?.pause(); } else { player?.resume(); }
-        });
-
-        document.getElementById('spCloseBtn')?.addEventListener('click', () => {
-            player?.pause();
-            isPlaying = false;
-            currentPlayingKey = null;
-            updateAllPlayButtons();
-            updateFloatingPlayerPlayState(false);
-            document.getElementById('sp-player-card')?.classList.remove('visible');
         });
 
         function toggleSpImg() {
@@ -476,22 +482,23 @@ document.addEventListener('DOMContentLoaded', function () {
             if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
         });
 
-        document.getElementById('spPrevBtn')?.addEventListener('click', () => {
-            if (!currentPlayingKey) return;
-            const sep = '::artist::';
-            const sepIdx = currentPlayingKey.indexOf(sep);
-            const showPart = currentPlayingKey.slice(0, sepIdx);
-            const artistIdx = parseInt(currentPlayingKey.slice(sepIdx + sep.length));
-            const visible = getVisibleShows();
-            const currentShow = visible.find(s => showKey(s) === showPart);
-            if (!currentShow) return;
-            const prevIdx = artistIdx - 1;
-            if (prevIdx >= 0) { playShow(currentShow, prevIdx); return; }
-            const visIdx = visible.indexOf(currentShow);
-            if (visIdx > 0) { const prev = visible[visIdx - 1]; playShow(prev, prev.artists.length - 1); }
-        });
-
+        document.getElementById('spPrevBtn')?.addEventListener('click', playPrevArtist);
         document.getElementById('spNextBtn')?.addEventListener('click', playNextArtist);
+
+        // Swipe left = next, swipe right = prev
+        const playerCard = document.getElementById('sp-player-card');
+        let swipeStartX = null;
+        playerCard.addEventListener('touchstart', (e) => {
+            swipeStartX = e.touches[0].clientX;
+        }, { passive: true });
+        playerCard.addEventListener('touchend', (e) => {
+            if (swipeStartX === null) return;
+            const dx = e.changedTouches[0].clientX - swipeStartX;
+            swipeStartX = null;
+            if (Math.abs(dx) < 50) return;
+            if (dx < 0) playNextArtist();
+            else playPrevArtist();
+        }, { passive: true });
     })();
 
     window.onSpotifyWebPlaybackSDKReady = () => {

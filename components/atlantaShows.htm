@@ -738,6 +738,8 @@
         .player-ext-link.yt   { border-color: #ff0000; color: #ff5555; }
         .player-ext-link.sp   { border-color: #1db954; color: #1db954; }
         .player-ext-link.goog { border-color: #aaa;    color: #ddd; }
+        .player-ext-link.loc  { border-color: #aaa; color: #ddd; background: none; cursor: pointer; }
+        .player-ext-link.loc:hover { background: rgba(255,255,255,0.2); }
 
         /* Floating Spotify player */
         #sp-player-card {
@@ -770,20 +772,13 @@
         .sp-header-btns { display: flex; align-items: center; gap: 4px; }
         .sp-ctrl-btn {
             background: none; border: none; color: var(--text-secondary);
-            cursor: pointer; font-size: 16px; padding: 4px 6px;
+            cursor: pointer; font-size: 22px; padding: 4px 7px;
             border-radius: 4px; line-height: 1;
             transition: background 0.15s, color 0.15s;
         }
         .sp-ctrl-btn:hover { background: var(--surface-hover); color: var(--text-primary); }
-        .sp-ctrl-btn.accent { color: #1db954; font-size: 18px; }
+        .sp-ctrl-btn.accent { color: #1db954; font-size: 26px; }
         .sp-ctrl-btn.accent:hover { background: rgba(29,185,84,0.1); }
-        .loc-btn {
-            background: none; border: none; color: var(--text-muted);
-            cursor: pointer; font-size: 14px; padding: 4px 5px;
-            border-radius: 4px; line-height: 1;
-            transition: background 0.15s, color 0.15s;
-        }
-        .loc-btn:hover { color: #1db954; background: rgba(29,185,84,0.1); }
 
         .sp-img-wrap { overflow: hidden; transition: height 0.25s; }
         .sp-img-wrap.expanded { height: 192px; }
@@ -970,12 +965,10 @@
                 <div class="sp-song-name" id="spSongName">—</div>
             </div>
             <div class="sp-header-btns">
-                <button class="loc-btn" id="spLocBtn" title="Scroll to event">📍</button>
                 <button class="sp-ctrl-btn" id="spPrevBtn" title="Previous artist">⏮</button>
                 <button class="sp-ctrl-btn accent" id="spPlayPauseBtn" title="Play/Pause">⏸</button>
                 <button class="sp-ctrl-btn" id="spNextBtn" title="Next artist">⏭</button>
                 <button class="sp-ctrl-btn" id="spToggleImg" title="Show/hide image">▼</button>
-                <button class="sp-ctrl-btn" id="spCloseBtn" title="Close">✕</button>
             </div>
         </div>
         <div class="sp-img-wrap expanded" id="spImgWrap">
@@ -985,6 +978,7 @@
                     <a class="player-ext-link yt" id="spExtYt" href="#" target="_blank" rel="noopener">▶ YouTube</a>
                     <a class="player-ext-link goog" id="spExtGoogle" href="#" target="_blank" rel="noopener">🔍 Google</a>
                     <a class="player-ext-link sp" id="spExtSpotify" href="#" target="_blank" rel="noopener">♫ Spotify</a>
+                    <button class="player-ext-link loc" id="spLocBtn" title="Scroll to event">📍 Pin</button>
                 </div>
             </div>
         </div>

@@ -489,8 +489,8 @@
         }
         .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
-        /* Floating YouTube player */
-        #yt-player-card {
+        /* Floating players (shared) */
+        .player-card {
             position: fixed; bottom: 16px; right: 16px;
             width: 340px;
             background: var(--player-bg);
@@ -499,84 +499,42 @@
             box-shadow: 0 6px 24px var(--shadow);
             z-index: 500; display: none; overflow: hidden;
         }
-        #yt-player-card.visible { display: block; }
+        .player-card.visible { display: block; }
 
-        .yt-player-header {
+        .player-header {
             display: flex; align-items: center; gap: 8px;
             padding: 10px 12px 8px;
             border-bottom: 1px solid var(--border-light);
         }
-
-        .yt-now-playing-info { flex: 1; min-width: 0; cursor: pointer; user-select: none; }
-        .yt-artist-name {
-            font-size: 13px; font-weight: 700;
-            color: var(--text-primary);
-            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-        }
-        .yt-song-name {
-            font-size: 11px; color: var(--text-muted);
-            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-        }
-
-        .yt-header-btns { display: flex; align-items: center; gap: 4px; }
-
-        .yt-ctrl-btn {
-            background: none; border: none; color: var(--text-secondary);
-            cursor: pointer; font-size: 16px; padding: 4px 6px;
-            border-radius: 4px; line-height: 1;
-            transition: background 0.15s, color 0.15s;
-        }
-        .yt-ctrl-btn:hover { background: var(--surface-hover); color: var(--text-primary); }
-        .yt-ctrl-btn.accent { color: #1db954; font-size: 18px; }
-        .yt-ctrl-btn.accent:hover { background: rgba(29,185,84,0.1); }
-
-        .yt-video-wrap { overflow: hidden; transition: height 0.25s; position: relative; }
-        .yt-video-wrap.expanded { height: 192px; }
-        .yt-video-wrap.collapsed { height: 0; }
-        #yt-iframe-container { width: 340px; height: 191px; }
-
-        /* Floating Spotify player */
-        #sp-player-card {
-            position: fixed; bottom: 16px; right: 16px;
-            width: 340px;
-            background: var(--player-bg);
-            border: 1px solid var(--border);
-            border-radius: 10px;
-            box-shadow: 0 6px 24px var(--shadow);
-            z-index: 500; display: none; overflow: hidden;
-        }
-        #sp-player-card.visible { display: block; }
-
-        .sp-player-header {
-            display: flex; align-items: center; gap: 8px;
-            padding: 10px 12px 8px;
-            border-bottom: 1px solid var(--border-light);
-        }
-        .sp-now-playing-info {
-            flex: 1; min-width: 0; cursor: pointer; user-select: none;
-        }
-        .sp-artist-name {
+        .player-info { flex: 1; min-width: 0; cursor: pointer; user-select: none; }
+        .player-artist-name {
             font-size: 13px; font-weight: 700; color: var(--text-primary);
             white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
         }
-        .sp-song-name {
+        .player-song-name {
             font-size: 11px; color: var(--text-muted);
             white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
         }
-        .sp-header-btns { display: flex; align-items: center; gap: 4px; }
-        .sp-ctrl-btn {
+        .player-header-btns { display: flex; align-items: center; gap: 4px; }
+        .player-ctrl-btn {
             background: none; border: none; color: var(--text-secondary);
-            cursor: pointer; font-size: 16px; padding: 4px 6px;
+            cursor: pointer; font-size: 22px; padding: 4px 7px;
             border-radius: 4px; line-height: 1;
             transition: background 0.15s, color 0.15s;
         }
-        .sp-ctrl-btn:hover { background: var(--surface-hover); color: var(--text-primary); }
-        .sp-ctrl-btn.accent { color: #1db954; font-size: 18px; }
-        .sp-ctrl-btn.accent:hover { background: rgba(29,185,84,0.1); }
+        .player-ctrl-btn:hover { background: var(--surface-hover); color: var(--text-primary); }
+        .player-ctrl-btn.accent { color: #1db954; font-size: 26px; }
+        .player-ctrl-btn.accent:hover { background: rgba(29,185,84,0.1); }
 
-        .sp-img-wrap { overflow: hidden; transition: height 0.25s; }
-        .sp-img-wrap.expanded { height: 192px; }
-        .sp-img-wrap.collapsed { height: 0; }
+        .player-media-wrap { overflow: hidden; transition: height 0.25s; }
+        .player-media-wrap.expanded { height: 192px; }
+        .player-media-wrap.collapsed { height: 0; }
+
+        /* YouTube-specific */
+        #ytVideoWrap { position: relative; }
+        #yt-iframe-container { width: 340px; height: 191px; }
+
+        /* Spotify-specific */
         #sp-img-container {
             width: 340px; height: 191px; position: relative;
             background: #000; overflow: hidden;
@@ -667,6 +625,11 @@
         .player-ext-link.yt  { border-color: #ff0000; color: #ff5555; }
         .player-ext-link.sp  { border-color: #1db954; color: #1db954; }
         .player-ext-link.goog { border-color: #aaa; color: #ddd; }
+        .player-ext-link.loc  { border-color: #aaa; color: #ddd; background: none; cursor: pointer; }
+        .player-ext-link.loc:hover { background: rgba(255,255,255,0.2); }
+        .player-ext-link.flag { border-color: #e67e22; color: #e67e22; background: none; cursor: pointer; }
+        .player-ext-link.flag:hover { background: rgba(230,126,34,0.2); }
+        .player-ext-link.flag:disabled { border-color: #1db954; color: #1db954; cursor: default; }
 
         /* YT links bar inside video area */
         #ytVideoWrap .player-links-bar {
@@ -676,15 +639,6 @@
         #sp-img-container .player-links-bar {
             position: absolute; bottom: 0; left: 0; right: 0;
         }
-
-        /* Location button */
-        .loc-btn {
-            background: none; border: none; color: var(--text-muted);
-            cursor: pointer; font-size: 14px; padding: 4px 5px;
-            border-radius: 4px; line-height: 1;
-            transition: background 0.15s, color 0.15s;
-        }
-        .loc-btn:hover { color: #1db954; background: rgba(29,185,84,0.1); }
 
         @media (max-width: 600px) {
             body { padding: 12px 8px 160px; }
@@ -742,7 +696,7 @@
             .play-btn { width: 24px; height: 24px; min-width: 24px; font-size: 10px; }
 
             /* Floating player — full width, flush to bottom */
-            #yt-player-card, #sp-player-card {
+            .player-card {
                 left: 0;
                 right: 0;
                 width: auto;
@@ -751,9 +705,8 @@
                 overflow: hidden;
             }
             #yt-iframe-container { width: 100% !important; height: auto !important; aspect-ratio: 16/9; }
-            .yt-video-wrap.expanded { height: auto; }
             #sp-img-container { width: 100%; height: auto; aspect-ratio: 16/9; }
-            .sp-img-wrap.expanded { height: auto; }
+            .player-media-wrap.expanded { height: auto; }
         }
     </style>
 </head>
@@ -872,55 +825,53 @@
     <div class="toast" id="toast"></div>
 
     <!-- Floating YouTube player -->
-    <div id="yt-player-card">
-        <div class="yt-player-header">
-            <div class="yt-now-playing-info" id="ytNowPlayingInfo" title="Tap to expand/collapse">
-                <div class="yt-artist-name" id="ytArtistName">—</div>
-                <div class="yt-song-name" id="ytSongName">—</div>
+    <div id="yt-player-card" class="player-card">
+        <div class="player-header">
+            <div class="player-info" id="ytNowPlayingInfo" title="Tap to expand/collapse">
+                <div class="player-artist-name" id="ytArtistName">—</div>
+                <div class="player-song-name" id="ytSongName">—</div>
             </div>
-            <div class="yt-header-btns">
-                <button class="loc-btn" id="ytLocBtn" title="Scroll to event">📍</button>
-                <button class="yt-ctrl-btn" id="ytPrevBtn" title="Previous artist">⏮</button>
-                <button class="yt-ctrl-btn accent" id="ytPlayPauseBtn" title="Play/Pause">⏸</button>
-                <button class="yt-ctrl-btn" id="ytNextBtn" title="Next artist">⏭</button>
-                <button class="yt-ctrl-btn" id="ytToggleVideo" title="Hide video">▼</button>
-                <button class="yt-ctrl-btn" id="ytReportVideoBtn" title="Report this video" style="font-size:13px;color:var(--text-muted);">⚑</button>
-                <button class="yt-ctrl-btn" id="ytCloseBtn" title="Close">✕</button>
+            <div class="player-header-btns">
+                <button class="player-ctrl-btn" id="ytPrevBtn" title="Previous artist">⏮</button>
+                <button class="player-ctrl-btn accent" id="ytPlayPauseBtn" title="Play/Pause">⏸</button>
+                <button class="player-ctrl-btn" id="ytNextBtn" title="Next artist">⏭</button>
+                <button class="player-ctrl-btn" id="ytToggleVideo" title="Hide video">▼</button>
             </div>
         </div>
-        <div class="yt-video-wrap expanded" id="ytVideoWrap">
+        <div class="player-media-wrap expanded" id="ytVideoWrap">
             <div id="yt-iframe-container"></div>
             <div class="player-links-bar" id="ytLinksBar">
                 <a class="player-ext-link yt" id="ytExtYt" href="#" target="_blank" rel="noopener">▶ YouTube</a>
                 <a class="player-ext-link goog" id="ytExtGoogle" href="#" target="_blank" rel="noopener">🔍 Google</a>
                 <a class="player-ext-link sp" id="ytExtSpotify" href="#" target="_blank" rel="noopener">♫ Spotify</a>
+                <button class="player-ext-link loc" id="ytLocBtn" title="Scroll to event">📍 Pin</button>
+                <button class="player-ext-link flag" id="ytReportVideoBtn" title="Report this video">⚑ Report</button>
             </div>
         </div>
     </div>
 
     <!-- Floating Spotify player -->
-    <div id="sp-player-card">
-        <div class="sp-player-header">
-            <div class="sp-now-playing-info" id="spNowPlayingInfo" title="Tap to expand/collapse">
-                <div class="sp-artist-name" id="spArtistName">—</div>
-                <div class="sp-song-name" id="spSongName">—</div>
+    <div id="sp-player-card" class="player-card">
+        <div class="player-header">
+            <div class="player-info" id="spNowPlayingInfo" title="Tap to expand/collapse">
+                <div class="player-artist-name" id="spArtistName">—</div>
+                <div class="player-song-name" id="spSongName">—</div>
             </div>
-            <div class="sp-header-btns">
-                <button class="loc-btn" id="spLocBtn" title="Scroll to event">📍</button>
-                <button class="sp-ctrl-btn" id="spPrevBtn" title="Previous artist">⏮</button>
-                <button class="sp-ctrl-btn accent" id="spPlayPauseBtn" title="Play/Pause">⏸</button>
-                <button class="sp-ctrl-btn" id="spNextBtn" title="Next artist">⏭</button>
-                <button class="sp-ctrl-btn" id="spToggleImg" title="Show/hide image">▼</button>
-                <button class="sp-ctrl-btn" id="spCloseBtn" title="Close">✕</button>
+            <div class="player-header-btns">
+                <button class="player-ctrl-btn" id="spPrevBtn" title="Previous artist">⏮</button>
+                <button class="player-ctrl-btn accent" id="spPlayPauseBtn" title="Play/Pause">⏸</button>
+                <button class="player-ctrl-btn" id="spNextBtn" title="Next artist">⏭</button>
+                <button class="player-ctrl-btn" id="spToggleImg" title="Show/hide image">▼</button>
             </div>
         </div>
-        <div class="sp-img-wrap expanded" id="spImgWrap">
+        <div class="player-media-wrap expanded" id="spImgWrap">
             <div id="sp-img-container">
                 <img id="sp-artist-img" src="" alt="">
                 <div class="player-links-bar" id="spLinksBar">
                     <a class="player-ext-link yt" id="spExtYt" href="#" target="_blank" rel="noopener">▶ YouTube</a>
                     <a class="player-ext-link goog" id="spExtGoogle" href="#" target="_blank" rel="noopener">🔍 Google</a>
                     <a class="player-ext-link sp" id="spExtSpotify" href="#" target="_blank" rel="noopener">♫ Spotify</a>
+                    <button class="player-ext-link loc" id="spLocBtn" title="Scroll to event">📍 Pin</button>
                 </div>
             </div>
         </div>
@@ -1836,17 +1787,27 @@
                 : ytPlayer.playVideo();
         });
 
-        document.getElementById('ytCloseBtn').addEventListener('click', () => {
-            ytClosePlayer();
-            ytActiveShowIdx = null; ytActiveArtistName = null; ytActiveArtistIdx = null;
-        });
-
         document.getElementById('ytPrevBtn').addEventListener('click', () => {
             if (ytActiveShowIdx !== null) ytPlayPrevArtist();
         });
         document.getElementById('ytNextBtn').addEventListener('click', () => {
             if (ytActiveShowIdx !== null) ytPlayNextArtist();
         });
+
+        function addSwipeNav(cardEl, prevFn, nextFn) {
+            let startX = null;
+            cardEl.addEventListener('touchstart', e => { startX = e.touches[0].clientX; }, { passive: true });
+            cardEl.addEventListener('touchend', e => {
+                if (startX === null) return;
+                const dx = e.changedTouches[0].clientX - startX;
+                startX = null;
+                if (Math.abs(dx) < 50) return;
+                if (dx < 0) nextFn(); else prevFn();
+            }, { passive: true });
+        }
+        addSwipeNav(document.getElementById('yt-player-card'),
+            () => { if (ytActiveShowIdx !== null) ytPlayPrevArtist(); },
+            () => { if (ytActiveShowIdx !== null) ytPlayNextArtist(); });
 
         document.getElementById('ytReportVideoBtn').addEventListener('click', async () => {
             if (!ytActiveArtistName || !ytActiveVideoId) return;
@@ -1871,18 +1832,22 @@
             }
         });
 
-        function toggleYtVideo() {
-            const wrap = document.getElementById('ytVideoWrap');
-            const btn  = document.getElementById('ytToggleVideo');
-            videoShown = !videoShown;
-            wrap.classList.toggle('expanded', videoShown);
-            wrap.classList.toggle('collapsed', !videoShown);
-            btn.title       = videoShown ? 'Hide video' : 'Show video';
-            btn.textContent = videoShown ? '▼' : '▲';
+        function addPlayerToggle(wrapId, btnId, infoId, shownGetter, shownSetter) {
+            function toggle() {
+                const shown = !shownGetter();
+                shownSetter(shown);
+                const wrap = document.getElementById(wrapId);
+                const btn  = document.getElementById(btnId);
+                wrap?.classList.toggle('expanded', shown);
+                wrap?.classList.toggle('collapsed', !shown);
+                if (btn) btn.textContent = shown ? '▼' : '▲';
+            }
+            document.getElementById(btnId).addEventListener('click', toggle);
+            document.getElementById(infoId).addEventListener('click', toggle);
         }
 
-        document.getElementById('ytToggleVideo').addEventListener('click', toggleYtVideo);
-        document.getElementById('ytNowPlayingInfo').addEventListener('click', toggleYtVideo);
+        addPlayerToggle('ytVideoWrap', 'ytToggleVideo', 'ytNowPlayingInfo',
+            () => videoShown, v => { videoShown = v; document.getElementById('ytToggleVideo').title = v ? 'Hide video' : 'Show video'; });
 
         document.getElementById('ytLocBtn').addEventListener('click', () => {
             if (ytActiveShowIdx === null) return;
@@ -2078,28 +2043,13 @@
         document.getElementById('spPlayPauseBtn').addEventListener('click', () => {
             if (spIsPlaying) { spPlayer?.pause(); } else { spPlayer?.resume(); }
         });
-        document.getElementById('spCloseBtn').addEventListener('click', () => {
-            spPlayer?.pause();
-            spIsPlaying = false; spCurrentPlayingKey = null;
-            spUpdateAllPlayButtons();
-            spUpdateFloatingPlayerPlayState(false);
-            document.getElementById('sp-player-card').classList.remove('visible');
-        });
         document.getElementById('spPrevBtn').addEventListener('click', () => { spPlayPrevArtist(); });
         document.getElementById('spNextBtn').addEventListener('click', () => { spPlayNextArtist(); });
 
-        (function wireSpToggle() {
-            function toggleSpImg() {
-                const wrap = document.getElementById('spImgWrap');
-                const btn  = document.getElementById('spToggleImg');
-                spImgShown = !spImgShown;
-                wrap?.classList.toggle('expanded', spImgShown);
-                wrap?.classList.toggle('collapsed', !spImgShown);
-                if (btn) btn.textContent = spImgShown ? '▼' : '▲';
-            }
-            document.getElementById('spToggleImg').addEventListener('click', toggleSpImg);
-            document.getElementById('spNowPlayingInfo').addEventListener('click', toggleSpImg);
-        })();
+        addSwipeNav(document.getElementById('sp-player-card'), spPlayPrevArtist, spPlayNextArtist);
+
+        addPlayerToggle('spImgWrap', 'spToggleImg', 'spNowPlayingInfo',
+            () => spImgShown, v => { spImgShown = v; });
 
         document.getElementById('spLocBtn').addEventListener('click', () => {
             if (!spCurrentPlayingKey) return;
