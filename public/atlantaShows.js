@@ -908,7 +908,78 @@ document.addEventListener('DOMContentLoaded', function () {
         const container = document.getElementById('showsContainer');
         const meta = document.getElementById('showsMeta');
 
-        const visible = allShows.filter(s => selectedVenueIds.has(s.venueId) && isUpcoming(s));
+        const raw = allShows.filter(s => selectedVenueIds.has(s.venueId) && isUpcoming(s));
+
+        // Combine events at the same venue+date that share at least one Spotify artist ID.
+        // Group by venue+date, then cluster within each group by artist ID overlap.
+        const byVenueDate = new Map();
+        raw.forEach(show => {
+            const dayKey = show.venueId + '|' + show.datetime.split('T')[0];
+            if (!byVenueDate.has(dayKey)) byVenueDate.set(dayKey, []);
+            byVenueDate.get(dayKey).push(show);
+        });
+
+        const mergedShows = [];
+        byVenueDate.forEach(group => {
+            // Union-find clustering by shared spotifyArtistId
+            const clusters = [];
+            group.forEach(show => {
+                const ids = new Set(show.spotifyArtistIds || []);
+                const overlapping = clusters.filter(c => [...ids].some(id => id && c.artistIds.has(id)));
+                if (overlapping.length === 0) {
+                    clusters.push({
+                        artistIds: ids,
+                        shows: [show]
+                    });
+                } else {
+                    // Merge all overlapping clusters plus this show into one
+                    const merged = overlapping[0];
+                    ids.forEach(id => merged.artistIds.add(id));
+                    merged.shows.push(show);
+                    for (let i = 1; i < overlapping.length; i++) {
+                        overlapping[i].artistIds.forEach(id => merged.artistIds.add(id));
+                        overlapping[i].shows.forEach(s => merged.shows.push(s));
+                        clusters.splice(clusters.indexOf(overlapping[i]), 1);
+                    }
+                }
+            });
+
+            clusters.forEach(({ shows }) => {
+                if (shows.length === 1) { mergedShows.push(shows[0]); return; }
+                // Merge: union of artists (deduplicated by spotifyArtistId, then by name)
+                const seenIds = new Set();
+                const seenNames = new Set();
+                const artists = [];
+                const spotifyArtistIds = [];
+                const avatarUrls = [];
+                shows.forEach(s => {
+                    (s.artists || []).forEach((name, i) => {
+                        const id = s.spotifyArtistIds?.[i] || null;
+                        if (id && seenIds.has(id)) return;
+                        if (!id && seenNames.has(name)) return;
+                        if (id) seenIds.add(id);
+                        seenNames.add(name);
+                        artists.push(name);
+                        spotifyArtistIds.push(id);
+                        avatarUrls.push(s.artistAvatarUrls?.[i] || null);
+                    });
+                });
+                mergedShows.push({
+                    ...shows[0],
+                    artists,
+                    spotifyArtistIds,
+                    artistAvatarUrls: avatarUrls,
+                    firstArtistAvatarUrl: avatarUrls[0] || shows[0].firstArtistAvatarUrl
+                });
+            });
+        });
+
+        // Sort by date ascending, then alphabetically by venue name
+        const visible = mergedShows.sort((a, b) => {
+            const dateCmp = a.datetime.localeCompare(b.datetime);
+            if (dateCmp !== 0) return dateCmp;
+            return (a.venue || '').localeCompare(b.venue || '');
+        });
 
         if (visible.length === 0) {
             meta.textContent = '';
