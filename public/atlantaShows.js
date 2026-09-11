@@ -914,7 +914,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const merged = new Map();
         raw.forEach(show => {
             const artistIdKey = (show.spotifyArtistIds || []).slice().sort().join(',');
-            const key = show.venueId + '|' + artistIdKey;
+            const key = show.venueId + '|' + show.datetime.split('T')[0] + '|' + artistIdKey;
             if (!merged.has(key)) {
                 merged.set(key, { ...show, allDatetimes: [show.datetime] });
             } else {
