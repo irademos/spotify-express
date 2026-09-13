@@ -2112,9 +2112,9 @@
                 });
             });
 
-            // Sort by date ascending, then alphabetically by venue name
+            // Sort by calendar date ascending, then alphabetically by venue name
             const visible = mergedShows.sort((a, b) => {
-                const dateCmp = a.datetime.localeCompare(b.datetime);
+                const dateCmp = a.datetime.split('T')[0].localeCompare(b.datetime.split('T')[0]);
                 if (dateCmp !== 0) return dateCmp;
                 return (a.venue || '').localeCompare(b.venue || '');
             });
