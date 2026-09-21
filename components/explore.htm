@@ -1050,6 +1050,15 @@
             localStorage.setItem('shows-spotify-mode', 'on');
         }
 
+        // ── Spotify player state ──────────────────────────────────────────────
+        let spPlayer = null;
+        let spDeviceId = null;
+        let spCurrentPlayingKey = null;
+        let spIsPlaying = false;
+        let spLastPosition = 0;
+        let spImgShown = true;
+        let spSdkLoaded = false;
+
         if (isSpotifyConnected()) {
             playerMode = 'spotify';
             loadSpotifySDK();
@@ -1856,14 +1865,6 @@
         });
 
         // ── Spotify player ────────────────────────────────────────────────────
-        let spPlayer = null;
-        let spDeviceId = null;
-        let spCurrentPlayingKey = null;
-        let spIsPlaying = false;
-        let spLastPosition = 0;
-        let spImgShown = true;
-        let spSdkLoaded = false;
-
         function spShowKey(show) { return show.datetime + '|' + show.venue; }
         function spArtistKey(show, idx) { return spShowKey(show) + '::artist::' + idx; }
 
