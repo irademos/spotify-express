@@ -420,6 +420,9 @@ document.addEventListener('DOMContentLoaded', function () {
     const QUEUE_SIZE = 15;
     let playQueue = []; // [{ key, show, artistIdx, artistName, artistId, uri, trackName, imgUrl }]
     let playRequestId = 0;
+    // Hand-off: play in the user's Spotify app (keeps going with the phone locked)
+    // instead of the in-browser Web Playback SDK player.
+    let handoff = localStorage.getItem('shows-spotify-handoff') === 'on';
 
     // ── Floating Spotify player UI ────────────────────────────────────────────
     function updateFloatingPlayer(artistName, songName, artistId, imgUrl) {
@@ -465,8 +468,16 @@ document.addEventListener('DOMContentLoaded', function () {
     (function wireFloatingPlayer() {
         const spPlayPause = document.getElementById('spPlayPauseBtn');
         if (!spPlayPause) return; // player not in DOM (page without player)
-        spPlayPause.addEventListener('click', () => {
-            if (isPlaying) { player?.pause(); } else { player?.resume(); }
+        spPlayPause.addEventListener('click', togglePlayPause);
+
+        updateHandoffUI();
+        document.getElementById('spHandoffBtn')?.addEventListener('click', () => {
+            handoff = !handoff;
+            localStorage.setItem('shows-spotify-handoff', handoff ? 'on' : 'off');
+            updateHandoffUI();
+            // Move whatever is playing over to the new target
+            const idx = queueIndexOfCurrent();
+            if (idx !== -1 && isPlaying) playShow(playQueue[idx].show, playQueue[idx].artistIdx);
         });
 
         function toggleSpImg() {
@@ -521,7 +532,7 @@ document.addEventListener('DOMContentLoaded', function () {
         });
 
         player.addListener('player_state_changed', (state) => {
-            if (!state) return;
+            if (!state || handoff) return; // app playback is tracked by pollAppPlayback
 
             // Natural end of the whole queue: was playing at a non-zero position, now paused at 0
             if (isPlaying && state.paused && state.position === 0 && lastPosition > 5000 && isLastInQueue()) {
@@ -735,15 +746,79 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function skipNext() {
         const idx = queueIndexOfCurrent();
-        if (player && idx !== -1 && idx < playQueue.length - 1) {
+        if (idx === -1 || idx >= playQueue.length - 1) { playNextArtist(); return; }
+        if (handoff) {
+            fetchWithSpotifyAuth('https://api.spotify.com/v1/me/player/next', { method: 'POST' }).catch(() => {});
+            setNowPlaying(playQueue[idx + 1]);
+        } else if (player) {
             player.nextTrack();
-        } else {
-            playNextArtist();
         }
     }
 
+    function togglePlayPause() {
+        if (!handoff) {
+            if (isPlaying) { player?.pause(); } else { player?.resume(); }
+            return;
+        }
+        fetchWithSpotifyAuth(`https://api.spotify.com/v1/me/player/${isPlaying ? 'pause' : 'play'}`, { method: 'PUT' })
+            .catch(() => {});
+        isPlaying = !isPlaying;
+        updateAllPlayButtons();
+        updateFloatingPlayerPlayState(isPlaying);
+    }
+
+    function updateHandoffUI() {
+        const btn = document.getElementById('spHandoffBtn');
+        if (!btn) return;
+        btn.textContent = handoff ? '📱' : '🌐';
+        btn.title = handoff
+            ? 'Playing in your Spotify app — tap to play in this browser'
+            : 'Playing in this browser — tap to play in your Spotify app';
+    }
+
+    // Pick the user's Spotify app device (phone, desktop app, speaker…), not this page's SDK player
+    async function findAppDevice() {
+        const res = await fetchWithSpotifyAuth('https://api.spotify.com/v1/me/player/devices');
+        if (res.status === 401 || res.status === 403) {
+            alert('Log in to Spotify again to allow playing in the Spotify app.');
+            return null;
+        }
+        const data = await res.json();
+        const devices = (data.devices || []).filter(d => d.id && d.id !== spotifyDeviceId && !d.is_restricted);
+        const device = devices.find(d => d.is_active)
+            || devices.find(d => d.type === 'Smartphone')
+            || devices[0];
+        if (!device) alert('Open the Spotify app, then press play again.');
+        return device?.id || null;
+    }
+
+    // While handed off, the SDK gets no events — poll the app's state while the page is visible
+    async function pollAppPlayback() {
+        if (!handoff || !playQueue.length || document.visibilityState !== 'visible') return;
+        try {
+            const res = await fetchWithSpotifyAuth('https://api.spotify.com/v1/me/player');
+            if (res.status !== 200) return; // 204: nothing playing anywhere
+            const state = await res.json();
+            // Whole queue finished: fetch the next batch and keep going
+            if (isPlaying && !state.is_playing && state.progress_ms === 0 && lastPosition > 5000 && isLastInQueue()) {
+                isPlaying = false;
+                updateAllPlayButtons();
+                updateFloatingPlayerPlayState(false);
+                playNextArtist();
+                return;
+            }
+            if (state.item) syncQueuePosition(state.item);
+            if (state.is_playing) lastPosition = state.progress_ms;
+            isPlaying = state.is_playing;
+            updateAllPlayButtons();
+            updateFloatingPlayerPlayState(isPlaying);
+        } catch (e) {}
+    }
+    setInterval(pollAppPlayback, 5000);
+    document.addEventListener('visibilitychange', pollAppPlayback);
+
     async function playShow(show, artistIdx = 0) {
-        if (!spotifyDeviceId) {
+        if (!handoff && !spotifyDeviceId) {
             alert('Spotify player not ready yet. Please wait a moment and try again.');
             return;
         }
@@ -761,12 +836,19 @@ document.addEventListener('DOMContentLoaded', function () {
             if (!resolved[0]) return;
             const entries = resolved.filter(Boolean);
 
-            await fetchWithSpotifyAuth(
-                `https://api.spotify.com/v1/me/player/play?device_id=${spotifyDeviceId}`, {
+            const deviceId = handoff ? await findAppDevice() : spotifyDeviceId;
+            if (!deviceId || requestId !== playRequestId) return;
+
+            const playRes = await fetchWithSpotifyAuth(
+                `https://api.spotify.com/v1/me/player/play?device_id=${deviceId}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ uris: entries.map(e => e.uri) })
             });
+            if (handoff && !playRes.ok) {
+                alert('Couldn’t start the Spotify app — open it and try again.');
+                return;
+            }
 
             playQueue = entries;
             isPlaying = true;
