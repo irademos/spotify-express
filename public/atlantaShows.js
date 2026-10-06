@@ -415,6 +415,14 @@ document.addEventListener('DOMContentLoaded', function () {
     let isPlaying = false;
     let lastPosition = 0;
     let spImgShown = true;
+    // Upcoming tracks handed to Spotify in one play call, so playback keeps
+    // advancing even when a phone suspends the page's JS (screen locked).
+    const QUEUE_SIZE = 15;
+    let playQueue = []; // [{ key, show, artistIdx, artistName, artistId, uri, trackName, imgUrl }]
+    let playRequestId = 0;
+    // Hand-off: play in the user's Spotify app (keeps going with the phone locked)
+    // instead of the in-browser Web Playback SDK player.
+    let handoff = localStorage.getItem('shows-spotify-handoff') === 'on';
 
     // ── Floating Spotify player UI ────────────────────────────────────────────
     function updateFloatingPlayer(artistName, songName, artistId, imgUrl) {
@@ -460,8 +468,16 @@ document.addEventListener('DOMContentLoaded', function () {
     (function wireFloatingPlayer() {
         const spPlayPause = document.getElementById('spPlayPauseBtn');
         if (!spPlayPause) return; // player not in DOM (page without player)
-        spPlayPause.addEventListener('click', () => {
-            if (isPlaying) { player?.pause(); } else { player?.resume(); }
+        spPlayPause.addEventListener('click', togglePlayPause);
+
+        updateHandoffUI();
+        document.getElementById('spHandoffBtn')?.addEventListener('click', () => {
+            handoff = !handoff;
+            localStorage.setItem('shows-spotify-handoff', handoff ? 'on' : 'off');
+            updateHandoffUI();
+            // Move whatever is playing over to the new target
+            const idx = queueIndexOfCurrent();
+            if (idx !== -1 && isPlaying) playShow(playQueue[idx].show, playQueue[idx].artistIdx);
         });
 
         function toggleSpImg() {
@@ -483,7 +499,7 @@ document.addEventListener('DOMContentLoaded', function () {
         });
 
         document.getElementById('spPrevBtn')?.addEventListener('click', playPrevArtist);
-        document.getElementById('spNextBtn')?.addEventListener('click', playNextArtist);
+        document.getElementById('spNextBtn')?.addEventListener('click', skipNext);
 
         // Swipe left = next, swipe right = prev
         const playerCard = document.getElementById('sp-player-card');
@@ -496,7 +512,7 @@ document.addEventListener('DOMContentLoaded', function () {
             const dx = e.changedTouches[0].clientX - swipeStartX;
             swipeStartX = null;
             if (Math.abs(dx) < 50) return;
-            if (dx < 0) playNextArtist();
+            if (dx < 0) skipNext();
             else playPrevArtist();
         }, { passive: true });
     })();
@@ -507,7 +523,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         player = new Spotify.Player({
             name: 'Atlanta Shows Player',
-            getOAuthToken: cb => { cb(token); },
+            getOAuthToken: cb => { cb(document.cookie.match(/spotifyAccessToken=([^;]+)/)?.[1]); },
             volume: 0.5
         });
 
@@ -516,16 +532,19 @@ document.addEventListener('DOMContentLoaded', function () {
         });
 
         player.addListener('player_state_changed', (state) => {
-            if (!state) return;
+            if (!state || handoff) return; // app playback is tracked by pollAppPlayback
 
-            // Detect natural song end: was playing at a non-zero position, now paused at 0
-            if (isPlaying && state.paused && state.position === 0 && lastPosition > 5000) {
+            // Natural end of the whole queue: was playing at a non-zero position, now paused at 0
+            if (isPlaying && state.paused && state.position === 0 && lastPosition > 5000 && isLastInQueue()) {
                 isPlaying = false;
                 updateAllPlayButtons();
                 updateFloatingPlayerPlayState(false);
                 playNextArtist();
                 return;
             }
+
+            const current = state.track_window?.current_track;
+            if (current) syncQueuePosition(current);
 
             if (!state.paused) {
                 lastPosition = state.position;
@@ -621,73 +640,220 @@ document.addEventListener('DOMContentLoaded', function () {
             .replace(/[^a-z0-9]/g, '');
     }
 
+    async function resolveArtistId(show, artistIdx) {
+        const artistName = show.artists[artistIdx];
+        // Use stored artist ID when available — skip the search entirely
+        let artistId = show.spotifyArtistIds?.[artistIdx] || null;
+        if (artistId) return artistId;
+
+        const searchRes = await fetchWithSpotifyAuth(
+            `https://api.spotify.com/v1/search?q=${encodeURIComponent('"' + artistName + '"')}&type=artist&limit=10`
+        );
+        const searchData = await searchRes.json();
+        const items = searchData.artists?.items || [];
+        const normalTarget = normalizeArtistName(artistName);
+
+        const exactMatch = items.find(a => normalizeArtistName(a.name) === normalTarget);
+        if (exactMatch) {
+            artistId = exactMatch.id;
+        } else {
+            const sorted = [...items].sort((a, b) => b.popularity - a.popularity);
+            artistId = sorted[0]?.id || null;
+        }
+
+        // Cache the found ID locally and persist to Supabase
+        if (artistId) {
+            if (!show.spotifyArtistIds) show.spotifyArtistIds = [];
+            show.spotifyArtistIds[artistIdx] = artistId;
+            fetch('/api/cache-artist-id', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: artistName, spotifyId: artistId })
+            }).catch(() => {});
+        }
+        return artistId;
+    }
+
+    // Resolve one artist slot to its top track; null if Spotify has nothing for it
+    async function resolveQueueEntry(show, artistIdx) {
+        const artistId = await resolveArtistId(show, artistIdx);
+        if (!artistId) return null;
+
+        const tracksRes = await fetchWithSpotifyAuth(
+            `https://api.spotify.com/v1/artists/${artistId}/top-tracks?market=US`
+        );
+        const tracksData = await tracksRes.json();
+        const track = tracksData.tracks?.[0];
+        if (!track?.uri) return null;
+
+        return {
+            key: artistKey(show, artistIdx),
+            show,
+            artistIdx,
+            artistName: show.artists[artistIdx],
+            artistId,
+            uri: track.uri,
+            trackName: track.name || '',
+            imgUrl: (show.artistAvatarUrls && show.artistAvatarUrls[artistIdx]) || show.firstArtistAvatarUrl || ''
+        };
+    }
+
+    // The clicked artist followed by the next artists in list order
+    function upcomingSlots(show, artistIdx, count) {
+        const slots = [{ show, artistIdx }];
+        const visible = getVisibleShows();
+        let showIdx = visible.findIndex(s => showKey(s) === showKey(show));
+        if (showIdx === -1) return slots;
+        let nextIdx = artistIdx + 1;
+        while (slots.length < count && showIdx < visible.length) {
+            if (nextIdx < visible[showIdx].artists.length) {
+                slots.push({ show: visible[showIdx], artistIdx: nextIdx++ });
+            } else {
+                showIdx++;
+                nextIdx = 0;
+            }
+        }
+        return slots;
+    }
+
+    function queueIndexOfCurrent() {
+        return playQueue.findIndex(e => e.key === currentPlayingKey);
+    }
+
+    function isLastInQueue() {
+        const idx = queueIndexOfCurrent();
+        return idx === -1 || idx === playQueue.length - 1;
+    }
+
+    function setNowPlaying(entry) {
+        currentPlayingKey = entry.key;
+        lastPosition = 0;
+        updateAllPlayButtons();
+        updateFloatingPlayer(entry.artistName, entry.trackName, entry.artistId, entry.imgUrl);
+    }
+
+    // Spotify advanced to another track in our queue — reflect it in the UI
+    function syncQueuePosition(track) {
+        const uris = [track.uri, track.linked_from?.uri].filter(Boolean);
+        const matches = e => uris.includes(e.uri);
+        const currentIdx = queueIndexOfCurrent();
+        if (currentIdx !== -1 && matches(playQueue[currentIdx])) return;
+        // Prefer the nearest match after the current entry (same track can repeat)
+        const after = playQueue.slice(currentIdx + 1).find(matches);
+        const entry = after || playQueue.find(matches);
+        if (entry) setNowPlaying(entry);
+    }
+
+    function skipNext() {
+        const idx = queueIndexOfCurrent();
+        if (idx === -1 || idx >= playQueue.length - 1) { playNextArtist(); return; }
+        if (handoff) {
+            fetchWithSpotifyAuth('https://api.spotify.com/v1/me/player/next', { method: 'POST' }).catch(() => {});
+            setNowPlaying(playQueue[idx + 1]);
+        } else if (player) {
+            player.nextTrack();
+        }
+    }
+
+    function togglePlayPause() {
+        if (!handoff) {
+            if (isPlaying) { player?.pause(); } else { player?.resume(); }
+            return;
+        }
+        fetchWithSpotifyAuth(`https://api.spotify.com/v1/me/player/${isPlaying ? 'pause' : 'play'}`, { method: 'PUT' })
+            .catch(() => {});
+        isPlaying = !isPlaying;
+        updateAllPlayButtons();
+        updateFloatingPlayerPlayState(isPlaying);
+    }
+
+    function updateHandoffUI() {
+        const btn = document.getElementById('spHandoffBtn');
+        if (!btn) return;
+        btn.textContent = handoff ? '📱' : '🌐';
+        btn.title = handoff
+            ? 'Playing in your Spotify app — tap to play in this browser'
+            : 'Playing in this browser — tap to play in your Spotify app';
+    }
+
+    // Pick the user's Spotify app device (phone, desktop app, speaker…), not this page's SDK player
+    async function findAppDevice() {
+        const res = await fetchWithSpotifyAuth('https://api.spotify.com/v1/me/player/devices');
+        if (res.status === 401 || res.status === 403) {
+            alert('Log in to Spotify again to allow playing in the Spotify app.');
+            return null;
+        }
+        const data = await res.json();
+        const devices = (data.devices || []).filter(d => d.id && d.id !== spotifyDeviceId && !d.is_restricted);
+        const device = devices.find(d => d.is_active)
+            || devices.find(d => d.type === 'Smartphone')
+            || devices[0];
+        if (!device) alert('Open the Spotify app, then press play again.');
+        return device?.id || null;
+    }
+
+    // While handed off, the SDK gets no events — poll the app's state while the page is visible
+    async function pollAppPlayback() {
+        if (!handoff || !playQueue.length || document.visibilityState !== 'visible') return;
+        try {
+            const res = await fetchWithSpotifyAuth('https://api.spotify.com/v1/me/player');
+            if (res.status !== 200) return; // 204: nothing playing anywhere
+            const state = await res.json();
+            // Whole queue finished: fetch the next batch and keep going
+            if (isPlaying && !state.is_playing && state.progress_ms === 0 && lastPosition > 5000 && isLastInQueue()) {
+                isPlaying = false;
+                updateAllPlayButtons();
+                updateFloatingPlayerPlayState(false);
+                playNextArtist();
+                return;
+            }
+            if (state.item) syncQueuePosition(state.item);
+            if (state.is_playing) lastPosition = state.progress_ms;
+            isPlaying = state.is_playing;
+            updateAllPlayButtons();
+            updateFloatingPlayerPlayState(isPlaying);
+        } catch (e) {}
+    }
+    setInterval(pollAppPlayback, 5000);
+    document.addEventListener('visibilitychange', pollAppPlayback);
+
     async function playShow(show, artistIdx = 0) {
-        if (!spotifyDeviceId) {
+        if (!handoff && !spotifyDeviceId) {
             alert('Spotify player not ready yet. Please wait a moment and try again.');
             return;
         }
 
-        lastPosition = 0;
+        const requestId = ++playRequestId;
         const artistName = show.artists[artistIdx];
-        const key = artistKey(show, artistIdx);
 
         try {
-            // Use stored artist ID when available — skip the search entirely
-            let artistId = show.spotifyArtistIds?.[artistIdx] || null;
+            const slots = upcomingSlots(show, artistIdx, QUEUE_SIZE);
+            const resolved = await Promise.all(slots.map(slot =>
+                resolveQueueEntry(slot.show, slot.artistIdx).catch(() => null)
+            ));
+            if (requestId !== playRequestId) return; // superseded by a newer click
+            // Keep the old behavior of doing nothing when the chosen artist isn't on Spotify
+            if (!resolved[0]) return;
+            const entries = resolved.filter(Boolean);
 
-            if (!artistId) {
-                const searchRes = await fetchWithSpotifyAuth(
-                    `https://api.spotify.com/v1/search?q=${encodeURIComponent('"' + artistName + '"')}&type=artist&limit=10`
-                );
-                const searchData = await searchRes.json();
-                const items = searchData.artists?.items || [];
-                const normalTarget = normalizeArtistName(artistName);
+            const deviceId = handoff ? await findAppDevice() : spotifyDeviceId;
+            if (!deviceId || requestId !== playRequestId) return;
 
-                const exactMatch = items.find(a => normalizeArtistName(a.name) === normalTarget);
-                if (exactMatch) {
-                    artistId = exactMatch.id;
-                } else {
-                    const sorted = [...items].sort((a, b) => b.popularity - a.popularity);
-                    artistId = sorted[0]?.id || null;
-                }
-
-                // Cache the found ID locally and persist to Supabase
-                if (artistId) {
-                    if (!show.spotifyArtistIds) show.spotifyArtistIds = [];
-                    show.spotifyArtistIds[artistIdx] = artistId;
-                    fetch('/api/cache-artist-id', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ name: artistName, spotifyId: artistId })
-                    }).catch(() => {});
-                }
-            }
-
-            if (!artistId) return;
-
-            const tracksRes = await fetchWithSpotifyAuth(
-                `https://api.spotify.com/v1/artists/${artistId}/top-tracks?market=US`
-            );
-            const tracksData = await tracksRes.json();
-            const trackUri = tracksData.tracks?.[0]?.uri;
-            if (!trackUri) return;
-
-            await fetchWithSpotifyAuth(
-                `https://api.spotify.com/v1/me/player/play?device_id=${spotifyDeviceId}`, {
+            const playRes = await fetchWithSpotifyAuth(
+                `https://api.spotify.com/v1/me/player/play?device_id=${deviceId}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ uris: [trackUri] })
+                body: JSON.stringify({ uris: entries.map(e => e.uri) })
             });
+            if (handoff && !playRes.ok) {
+                alert('Couldn’t start the Spotify app — open it and try again.');
+                return;
+            }
 
-            currentPlayingKey = key;
+            playQueue = entries;
             isPlaying = true;
-            updateAllPlayButtons();
+            setNowPlaying(entries[0]);
             updateFloatingPlayerPlayState(true);
-
-            // Update floating player UI
-            const trackName = tracksData.tracks?.[0]?.name || '';
-            const imgUrl = (show.artistAvatarUrls && show.artistAvatarUrls[artistIdx]) || show.firstArtistAvatarUrl || '';
-            updateFloatingPlayer(artistName, trackName, artistId, imgUrl);
         } catch (err) {
             console.error('Error playing artist:', artistName, err);
         }
