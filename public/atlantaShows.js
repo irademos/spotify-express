@@ -1,5 +1,7 @@
 document.addEventListener('DOMContentLoaded', function () {
     let allShows = [];
+    // Shows exactly as listed on the page (merged + sorted) — playback follows this order
+    let displayedShows = [];
     let allApiVenues = [];
     let venues = [];
     let selectedVenueIds = new Set();
@@ -558,8 +560,10 @@ document.addEventListener('DOMContentLoaded', function () {
         player.connect();
     };
 
+    // Unique per listed event — assigned in renderShows so two events at the
+    // same venue and time never share a key (and so never both look "playing")
     function showKey(show) {
-        return show.datetime + '|' + show.venue;
+        return show._key || (show.datetime + '|' + show.venue);
     }
 
     function artistKey(show, idx) {
@@ -578,7 +582,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function getVisibleShows() {
-        return allShows.filter(s => selectedVenueIds.has(s.venueId) && isUpcoming(s));
+        return displayedShows;
     }
 
     function updateAllPlayButtons() {
@@ -1146,6 +1150,17 @@ document.addEventListener('DOMContentLoaded', function () {
             if (dateCmp !== 0) return dateCmp;
             return (a.venue || '').localeCompare(b.venue || '');
         });
+
+        const usedKeys = new Set();
+        visible.forEach(show => {
+            const base = show.concertUri
+                || [show.datetime, show.venueId || show.venue, (show.artists || []).join(',')].join('|');
+            let key = base;
+            for (let n = 2; usedKeys.has(key); n++) key = base + '#' + n;
+            usedKeys.add(key);
+            show._key = key;
+        });
+        displayedShows = visible;
 
         if (visible.length === 0) {
             meta.textContent = '';
