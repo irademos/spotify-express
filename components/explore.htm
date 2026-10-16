@@ -1611,68 +1611,37 @@
         const showFallbackState = {};
         let pendingVideoIds = [];
 
+        // Shows exactly as listed on the page (merged + sorted) — playback follows this order
+        let displayedShows = [];
+
         function getVisibleShows() {
-            return allShows.filter(s => selectedVenueIds.has(s.venueId) && isUpcoming(s));
+            return displayedShows;
         }
 
-        function ytPlayPrevArtist() {
-            const visible = getVisibleShows();
-            const visIdx  = visible.findIndex(s => allShows.indexOf(s) === ytActiveShowIdx);
-            if (visIdx === -1) return;
-            const show = visible[visIdx];
-            const prevArtistIdx = (ytActiveArtistIdx ?? 0) - 1;
-            if (prevArtistIdx >= 0) {
-                const name  = show.artists[prevArtistIdx];
+        // A listed show by its play-button index (merged shows carry the merged artist list)
+        function displayedShowAt(idx) {
+            return displayedShows.find(s => s._idx === idx) || allShows[idx];
+        }
+
+        // Move dir (+1/-1) through the artists in list order, skipping ones with no songs
+        function ytStepArtist(dir) {
+            const slots = [];
+            displayedShows.forEach(show => show.artists.forEach((name, aIdx) => slots.push({ show, aIdx, name })));
+            let pos = slots.findIndex(s => s.show._idx === ytActiveShowIdx && s.aIdx === (ytActiveArtistIdx ?? 0));
+            if (pos === -1) return;
+            for (pos += dir; pos >= 0 && pos < slots.length; pos += dir) {
+                const { show, name } = slots[pos];
                 const songs = artistTopSongs[name] || [];
-                if (songs.length > 0) {
-                    delete showFallbackState[ytActiveShowIdx + '|' + name];
-                    ytActiveArtistIdx = prevArtistIdx;
-                    ytSearchAndPlay(ytActiveShowIdx, name, songs[0]); return;
-                }
-            }
-            const prevVisIdx = visIdx - 1;
-            if (prevVisIdx >= 0) {
-                const prevShow   = visible[prevVisIdx];
-                const prevGlobal = allShows.indexOf(prevShow);
-                const lastIdx    = prevShow.artists.length - 1;
-                const name       = prevShow.artists[lastIdx];
-                const songs      = artistTopSongs[name] || [];
-                if (songs.length > 0) {
-                    delete showFallbackState[prevGlobal + '|' + name];
-                    ytActiveArtistIdx = lastIdx;
-                    ytSearchAndPlay(prevGlobal, name, songs[0]);
-                }
+                if (songs.length === 0) continue;
+                delete showFallbackState[show._idx + '|' + name];
+                ytSearchAndPlay(show._idx, name, songs[0]);
+                return;
             }
         }
 
-        function ytPlayNextArtist() {
-            const visible = getVisibleShows();
-            const visIdx  = visible.findIndex(s => allShows.indexOf(s) === ytActiveShowIdx);
-            if (visIdx === -1) return;
-            const show    = visible[visIdx];
-            const nextIdx = (ytActiveArtistIdx ?? 0) + 1;
-            if (nextIdx < show.artists.length) {
-                const name  = show.artists[nextIdx];
-                const songs = artistTopSongs[name] || [];
-                if (songs.length > 0) {
-                    delete showFallbackState[ytActiveShowIdx + '|' + name];
-                    ytActiveArtistIdx = nextIdx;
-                    ytSearchAndPlay(ytActiveShowIdx, name, songs[0]); return;
-                }
-            }
-            const nextVisIdx = visIdx + 1;
-            if (nextVisIdx < visible.length) {
-                const nextShow   = visible[nextVisIdx];
-                const nextGlobal = allShows.indexOf(nextShow);
-                const firstName  = nextShow.artists[0];
-                const songs      = artistTopSongs[firstName] || [];
-                if (songs.length > 0) {
-                    delete showFallbackState[nextGlobal + '|' + firstName];
-                    ytActiveArtistIdx = 0;
-                    ytSearchAndPlay(nextGlobal, firstName, songs[0]);
-                }
-            }
-        }
+        function ytPlayPrevArtist() { ytStepArtist(-1); }
+
+        function ytPlayNextArtist() { ytStepArtist(1); }
 
         window.onYouTubeIframeAPIReady = function () {
             ytPlayer = new YT.Player('yt-iframe-container', {
@@ -1768,7 +1737,7 @@
 
             ytActiveShowIdx    = showIdx;
             ytActiveArtistName = artistName;
-            ytActiveArtistIdx  = (allShows[showIdx]?.artists ?? []).indexOf(artistName);
+            ytActiveArtistIdx  = (displayedShowAt(showIdx)?.artists ?? []).indexOf(artistName);
             ytActiveVideoId    = videoId;
 
             const reportVideoBtn = document.getElementById('ytReportVideoBtn');
@@ -1785,7 +1754,7 @@
             const gq = encodeURIComponent(artistName + ' music');
             document.getElementById('ytExtYt').href     = `https://www.youtube.com/results?search_query=${encodeURIComponent(artistName)}`;
             document.getElementById('ytExtGoogle').href = `https://www.google.com/search?q=${gq}`;
-            const show = allShows[showIdx];
+            const show = displayedShowAt(showIdx);
             const aIdxForSpotify = (show?.artists ?? []).indexOf(artistName);
             const spId = show?.spotifyArtistIds?.[aIdxForSpotify];
             document.getElementById('ytExtSpotify').href = spId
@@ -1877,7 +1846,9 @@
         });
 
         // ── Spotify player ────────────────────────────────────────────────────
-        function spShowKey(show) { return show.datetime + '|' + show.venue; }
+        // Unique per listed event (assigned in renderShows) so two events at the same
+        // venue and time never both look "playing"
+        function spShowKey(show) { return show._key || (show.datetime + '|' + show.venue); }
         function spArtistKey(show, idx) { return spShowKey(show) + '::artist::' + idx; }
 
         function loadSpotifySDK() {
@@ -2235,7 +2206,7 @@
             const container = document.getElementById('showsContainer');
             const meta      = document.getElementById('showsMeta');
 
-            const raw = getVisibleShows();
+            const raw = allShows.filter(s => selectedVenueIds.has(s.venueId) && isUpcoming(s));
 
             // Combine events at the same venue+date that share at least one Spotify artist ID
             const byVenueDate = new Map();
@@ -2290,6 +2261,18 @@
                 if (dateCmp !== 0) return dateCmp;
                 return (a.venue || '').localeCompare(b.venue || '');
             });
+
+            const usedKeys = new Set();
+            visible.forEach(show => {
+                show._idx = allShows.indexOf(show._sourceShow || show);
+                const base = show.concertUri
+                    || [show.datetime, show.venueId || show.venue, (show.artists || []).join(',')].join('|');
+                let key = base;
+                for (let n = 2; usedKeys.has(key); n++) key = base + '#' + n;
+                usedKeys.add(key);
+                show._key = key;
+            });
+            displayedShows = visible;
 
             if (visible.length === 0) {
                 meta.textContent = '';
